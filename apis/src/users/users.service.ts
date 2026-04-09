@@ -304,6 +304,10 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
   async updateProfile(id: string, dto: UpdateProfileDto): Promise<Omit<User, 'passwordHash'>> {
     const user = await this.findById(id);
 
+    if (!dto.currentPassword?.trim() || !dto.newPassword?.trim()) {
+      throw new BadRequestException('Senha atual e nova senha são obrigatórias');
+    }
+
     const isValidPassword = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!isValidPassword) {
       throw new UnauthorizedException('Senha atual inválida');

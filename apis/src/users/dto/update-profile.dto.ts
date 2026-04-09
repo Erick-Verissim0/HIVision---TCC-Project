@@ -6,6 +6,7 @@ export class UpdateProfileDto {
   currentPassword: string;
 
   @IsString()
+  @IsNotEmpty()
   @Length(6, 64)
   newPassword: string;
 

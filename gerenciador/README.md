@@ -1,30 +1,16 @@
-# TEMPLATE ADMIN
+# gerenciador
 
-Template de Gerenciador Web básico
+Projeto Flutter configurado para executar somente na web.
 
-----
+## Executar
 
-## Informações do Projeto
+1. Entre na pasta do projeto:
+	`cd gerenciador`
+2. Instale as dependencias:
+	`flutter pub get`
+3. Rode no Chrome:
+	`flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3001`
 
-Projeto criado com:
-- NextJS V15
-- TypeScript
-- Tailwind CSS
+## Observacao
 
----- 
-
-## Baixar o projeto
-
-```
-git clone https://github.com/CarlosWGama/admin-template.git gerenciador
-cd gerenciador
-npm install 
-npm run dev
-```
-
------
-
-## Autor
-
-**Autor:** Carlos W. Gama 
-**Licença:** MIT
+As plataformas `android/` e `ios/` foram removidas intencionalmente para manter este app web-only.
