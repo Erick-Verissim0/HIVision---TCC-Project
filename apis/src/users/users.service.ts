@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   OnModuleDestroy,
@@ -7,9 +8,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import * as nodemailer from 'nodemailer';
 import { Pool } from 'pg';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ForgotPasswordRequestDto } from './dto/forgot-password-request.dto';
 import { LoginUserDto } from './dto/login-doctor.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 import { User } from './user.entity';
@@ -48,10 +52,23 @@ type PaginatedResponse<T> = {
   };
 };
 
+type ForgotPasswordCodeEntry = {
+  code: string;
+  expiresAt: number;
+  failedAttempts: number;
+};
+
 @Injectable()
 export class UsersService implements OnModuleInit, OnModuleDestroy {
+  private static readonly FORGOT_PASSWORD_CODE_TTL_MS = 15 * 60 * 1000;
+  private static readonly FORGOT_PASSWORD_MAX_ATTEMPTS = 5;
+
   private users: User[] = [];
   private readonly pool: Pool;
+  private mailTransporter: nodemailer.Transporter | null;
+  private mailFromAddress = 'no-reply@hivision.local';
+  private mailFromName = 'HIVision';
+  private readonly forgotPasswordCodes = new Map<string, ForgotPasswordCodeEntry>();
 
   constructor() {
     this.pool = new Pool({
@@ -61,11 +78,13 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       user: process.env.DB_USER ?? process.env.POSTGRES_USER ?? 'hivision',
       password: process.env.DB_PASSWORD ?? process.env.POSTGRES_PASSWORD ?? 'hivision123',
     });
+    this.mailTransporter = null;
   }
 
   async onModuleInit(): Promise<void> {
     await this.pool.query('SELECT 1');
     await this.refreshUsersCache();
+    await this.initializeMailTransporter();
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -75,6 +94,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
   async createDoctor(dto: CreateDoctorDto): Promise<Omit<User, 'passwordHash'>> {
     const normalizedCpf = this.normalizeCpf(dto.cpf);
     const email = dto.email.toLowerCase();
+    await this.assertEmailAndCpfAreUnique({ email, cpf: normalizedCpf });
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     try {
@@ -97,6 +117,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
 
   async createAdmin(dto: CreateAdminDto): Promise<Omit<User, 'passwordHash'>> {
     const email = dto.email.toLowerCase();
+    await this.assertEmailAndCpfAreUnique({ email });
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     try {
@@ -388,6 +409,65 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  async forgotPassword(
+    dto: ForgotPasswordDto,
+  ): Promise<{ id: string; name: string; email: string; type: 'doctor' | 'admin' }> {
+    const email = dto.email.toLowerCase();
+    const resetCode = this.normalizeResetCode(dto.resetCode);
+    const { rows } = await this.pool.query<UserRow>(
+      'SELECT * FROM users WHERE email = $1 LIMIT 1',
+      [email],
+    );
+    const user = rows.length ? this.mapRowToUser(rows[0]) : null;
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    this.validateForgotPasswordCode(email, resetCode);
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    const result = await this.pool.query<UserRow>(
+      `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [hashedPassword, user.id],
+    );
+
+    this.forgotPasswordCodes.delete(email);
+
+    const updatedUser = this.mapRowToUser(result.rows[0]);
+    this.replaceCachedUser(updatedUser);
+
+    return {
+      id: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      type: updatedUser.type,
+    };
+  }
+
+  async requestForgotPasswordLink(
+    dto: ForgotPasswordRequestDto,
+  ): Promise<{ message: string; email: string }> {
+    const email = dto.email.toLowerCase();
+    const { rows } = await this.pool.query<UserRow>(
+      'SELECT * FROM users WHERE email = $1 LIMIT 1',
+      [email],
+    );
+
+    if (!rows.length) {
+      throw new NotFoundException('User not found');
+    }
+
+    const user = this.mapRowToUser(rows[0]);
+    const resetCode = this.issueForgotPasswordCode(email);
+    await this.sendForgotPasswordEmail(user.name, email, resetCode);
+
+    return {
+      message: 'Password reset link requested',
+      email,
+    };
+  }
+
   exists(id: string): boolean {
     return this.users.some((user) => user.id === id);
   }
@@ -420,6 +500,221 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
     this.users.push(updatedUser);
   }
 
+  private async initializeMailTransporter(): Promise<void> {
+    if (this.mailTransporter) {
+      return;
+    }
+
+    const configuredTransporter = this.createConfiguredMailTransporter();
+    if (configuredTransporter != null) {
+      this.mailTransporter = configuredTransporter;
+      this.mailFromAddress =
+        process.env.SMTP_FROM_EMAIL ?? process.env.SMTP_USER ?? this.mailFromAddress;
+      this.mailFromName = process.env.SMTP_FROM_NAME ?? this.mailFromName;
+      return;
+    }
+
+    const allowEthereal =
+      String(process.env.ALLOW_ETHEREAL_TEST ?? 'false').toLowerCase() === 'true';
+    if (!allowEthereal) {
+      console.warn(
+        '[mail] SMTP não configurado. Defina SMTP_HOST, SMTP_PORT, SMTP_USER e SMTP_PASSWORD para envio real. ' +
+          'Se quiser usar Ethereal para testes, defina ALLOW_ETHEREAL_TEST=true.',
+      );
+      return;
+    }
+
+    const testAccount = await nodemailer.createTestAccount();
+    this.mailTransporter = nodemailer.createTransport({
+      host: testAccount.smtp.host,
+      port: testAccount.smtp.port,
+      secure: testAccount.smtp.secure,
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass,
+      },
+    });
+    this.mailFromAddress = testAccount.user;
+    this.mailFromName = 'HIVision Test';
+    console.log('[mail] SMTP não configurado. Usando conta de teste Ethereal:', testAccount.user);
+  }
+
+  private createConfiguredMailTransporter(): nodemailer.Transporter | null {
+    const service = process.env.SMTP_SERVICE;
+    const host = process.env.SMTP_HOST;
+    const port = Number(process.env.SMTP_PORT ?? 587);
+    const user = process.env.SMTP_USER;
+    const password = process.env.SMTP_PASSWORD;
+
+    if (!user || !password) {
+      return null;
+    }
+
+    if (service) {
+      return nodemailer.createTransport({
+        service,
+        auth: {
+          user,
+          pass: password,
+        },
+      });
+    }
+
+    if (!host) {
+      return null;
+    }
+
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure: String(process.env.SMTP_SECURE ?? 'false').toLowerCase() === 'true',
+      auth: {
+        user,
+        pass: password,
+      },
+    });
+  }
+
+  private async sendForgotPasswordEmail(
+    name: string,
+    email: string,
+    resetCode: string,
+  ): Promise<void> {
+    await this.initializeMailTransporter();
+
+    if (!this.mailTransporter) {
+      throw new BadRequestException(
+        'Serviço de e-mail não configurado. Defina SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD ' +
+          'ou SMTP_SERVICE/SMTP_USER/SMTP_PASSWORD (ex.: Gmail).',
+      );
+    }
+
+    const info = await this.mailTransporter.sendMail({
+      from: `"${this.mailFromName}" <${this.mailFromAddress}>`,
+      to: email,
+      subject: 'Recuperação de senha - HIVision',
+      text: this.buildForgotPasswordText(name, resetCode),
+      html: this.buildForgotPasswordHtml(name, resetCode),
+    });
+
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+      console.log('[mail] Preview URL:', previewUrl);
+    }
+  }
+
+  private buildForgotPasswordText(name: string, resetCode: string): string {
+    return [
+      `Olá, ${name}.`,
+      '',
+      'Recebemos uma solicitação para redefinir sua senha no HIVision.',
+      `Código de recuperação: ${resetCode}`,
+      '',
+      'Insira este código na tela do aplicativo para definir sua nova senha.',
+      '',
+      'Se você não fez essa solicitação, ignore este e-mail.',
+    ].join('\n');
+  }
+
+  private buildForgotPasswordHtml(name: string, resetCode: string): string {
+    return `
+      <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.5;">
+        <h2 style="color: #760000;">Recuperação de senha</h2>
+        <p>Olá, <strong>${this.escapeHtml(name)}</strong>.</p>
+        <p>Recebemos uma solicitação para redefinir sua senha no HIVision.</p>
+        <p><strong>Código de recuperação:</strong> ${this.escapeHtml(resetCode)}</p>
+        <p>Insira este código na tela do aplicativo para definir sua nova senha.</p>
+        <p>Se você não fez essa solicitação, ignore este e-mail.</p>
+      </div>
+    `;
+  }
+
+  private issueForgotPasswordCode(email: string): string {
+    const code = this.generateResetCode();
+    const expiresAt = Date.now() + UsersService.FORGOT_PASSWORD_CODE_TTL_MS;
+    this.forgotPasswordCodes.set(email.toLowerCase(), { code, expiresAt, failedAttempts: 0 });
+    return code;
+  }
+
+  private validateForgotPasswordCode(email: string, providedCode: string): void {
+    const normalizedEmail = email.toLowerCase();
+    const codeEntry = this.forgotPasswordCodes.get(normalizedEmail);
+
+    if (!codeEntry) {
+      throw new BadRequestException('Solicite um novo código de recuperação');
+    }
+
+    if (codeEntry.expiresAt < Date.now()) {
+      this.forgotPasswordCodes.delete(normalizedEmail);
+      throw new BadRequestException('Código de recuperação inválido ou expirado');
+    }
+
+    if (codeEntry.code !== providedCode) {
+      codeEntry.failedAttempts += 1;
+
+      if (codeEntry.failedAttempts >= UsersService.FORGOT_PASSWORD_MAX_ATTEMPTS) {
+        this.forgotPasswordCodes.delete(normalizedEmail);
+        throw new BadRequestException(
+          'Número de tentativas excedido. Solicite um novo código de recuperação',
+        );
+      }
+
+      this.forgotPasswordCodes.set(normalizedEmail, codeEntry);
+      throw new BadRequestException('Código de recuperação inválido ou expirado');
+    }
+  }
+
+  private generateResetCode(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  private normalizeResetCode(rawCode: string): string {
+    return rawCode.replace(/\D/g, '');
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  private async assertEmailAndCpfAreUnique(params: { email: string; cpf?: string }): Promise<void> {
+    const email = params.email.toLowerCase();
+    const values: string[] = [email];
+    const filters = ['LOWER(email) = $1'];
+
+    if (params.cpf) {
+      values.push(params.cpf);
+      filters.push(`cpf = $${values.length}`);
+    }
+
+    const { rows } = await this.pool.query<{ email: string; cpf: string | null }>(
+      `SELECT email, cpf FROM users WHERE ${filters.join(' OR ')}`,
+      values,
+    );
+
+    const emailExists = rows.some((row) => row.email.toLowerCase() === email);
+    if (emailExists) {
+      throw new ConflictException({
+        message: 'Email já existe',
+        field: 'email',
+      });
+    }
+
+    if (params.cpf) {
+      const cpfExists = rows.some((row) => row.cpf === params.cpf);
+      if (cpfExists) {
+        throw new ConflictException({
+          message: 'CPF já existe',
+          field: 'cpf',
+        });
+      }
+    }
+  }
+
   private mapRowToUser(row: UserRow): User {
     return {
       id: row.id,
@@ -434,7 +729,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private mapDatabaseError(error: any): BadRequestException {
+  private mapDatabaseError(error: any): BadRequestException | ConflictException {
     if (error?.code !== '23505') {
       return new BadRequestException(error?.message ?? 'Database error');
     }
@@ -442,18 +737,27 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
     const constraint = String(error?.constraint ?? '');
 
     if (constraint.includes('users_email_key')) {
-      return new BadRequestException('Email already in use');
+      return new ConflictException({
+        message: 'Email já existe',
+        field: 'email',
+      });
     }
 
     if (constraint.includes('users_cpf_key')) {
-      return new BadRequestException('CPF already in use');
+      return new ConflictException({
+        message: 'CPF já existe',
+        field: 'cpf',
+      });
     }
 
     if (constraint.includes('users_crm_key')) {
-      return new BadRequestException('CRM already in use');
+      return new ConflictException({
+        message: 'CRM já existe',
+        field: 'crm',
+      });
     }
 
-    return new BadRequestException('Unique field already in use');
+    return new ConflictException('Campo único já existe');
   }
 
   private normalizeCpf(cpf: string): string {

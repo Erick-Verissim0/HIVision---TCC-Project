@@ -70,7 +70,6 @@ class AuthService {
       final map = jsonDecode(rawUser) as Map<String, dynamic>;
       return AppUser.fromStorageJson(map);
     } catch (_) {
-      // Clear invalid persisted session to avoid startup crash on web refresh.
       await prefs.remove(_userKey);
       return null;
     }

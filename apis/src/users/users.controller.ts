@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ForgotPasswordRequestDto } from './dto/forgot-password-request.dto';
 import { LoginUserDto } from './dto/login-doctor.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 import { UsersService } from './users.service';
@@ -25,6 +27,24 @@ export class UsersController {
   @HttpCode(200)
   login(@Body() dto: LoginUserDto) {
     return this.doctorsService.login(dto);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.doctorsService.forgotPassword(dto);
+  }
+
+  @Post('forgot-password/request-link')
+  @HttpCode(200)
+  requestForgotPasswordLink(@Body() dto: ForgotPasswordRequestDto) {
+    return this.doctorsService.requestForgotPasswordLink(dto);
+  }
+
+  @Post('forgot-password/resend-link')
+  @HttpCode(200)
+  resendForgotPasswordLink(@Body() dto: ForgotPasswordRequestDto) {
+    return this.doctorsService.requestForgotPasswordLink(dto);
   }
 
   @Get()

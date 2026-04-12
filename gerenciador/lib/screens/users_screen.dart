@@ -56,7 +56,6 @@ class _UsersScreenState extends State<UsersScreen> {
     final currentName = _nameFilter.text;
     final currentEmail = _emailFilter.text;
 
-    // TextEditingController listeners also fire on focus/selection changes.
     if (currentName == _lastNameFilterText && currentEmail == _lastEmailFilterText) {
       return;
     }
