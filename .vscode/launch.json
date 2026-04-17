@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Gerenciador Flutter (Web 3000)",
+      "request": "launch",
+      "type": "dart",
+      "program": "gerenciador_flutter/lib/main.dart",
+      "cwd": "gerenciador_flutter",
+      "deviceId": "chrome",
+      "args": [
+        "--web-hostname=localhost",
+        "--web-port=3000",
+        "--web-browser-debug-port=9222",
+        "--host-vmservice-port=8181",
+        "--web-browser-flag=--disable-cache",
+        "--web-browser-flag=--disable-application-cache",
+        "--dart-define=API_BASE_URL=http://localhost:3001"
+      ]
+    }
+  ]
+}
