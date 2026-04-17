@@ -797,7 +797,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Digite o e-mail cadastrado e enviaremos o link para você criar uma nova senha.',
+                      'Digite o e-mail cadastrado e enviaremos um código para você criar uma nova senha.',
                       style: TextStyle(color: Color(0xFF222222), fontSize: 20, height: 1.2),
                     ),
                     const SizedBox(height: 30),
