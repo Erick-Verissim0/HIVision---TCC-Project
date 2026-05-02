@@ -27,6 +27,7 @@ type UserRow = {
   cpf: string | null;
   email: string;
   crm: string | null;
+  image: string | null;
   type: 'doctor' | 'admin';
   created_at: Date;
   updated_at: Date;
@@ -100,11 +101,11 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
     try {
       const { rows } = await this.pool.query<UserRow>(
         `
-          INSERT INTO users (name, password_hash, cpf, email, crm, type, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, 'doctor', NOW(), NOW())
+          INSERT INTO users (name, password_hash, cpf, email, crm, image, type, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, 'doctor', NOW(), NOW())
           RETURNING *
         `,
-        [dto.name, passwordHash, normalizedCpf, email, dto.crm],
+        [dto.name, passwordHash, normalizedCpf, email, dto.crm, dto.image ?? null],
       );
 
       const doctor = this.mapRowToUser(rows[0]);
@@ -123,11 +124,11 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
     try {
       const { rows } = await this.pool.query<UserRow>(
         `
-          INSERT INTO users (name, password_hash, email, type, created_at, updated_at)
-          VALUES ($1, $2, $3, 'admin', NOW(), NOW())
+          INSERT INTO users (name, password_hash, email, image, type, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, 'admin', NOW(), NOW())
           RETURNING *
         `,
-        [dto.name, passwordHash, email],
+        [dto.name, passwordHash, email, dto.image ?? null],
       );
 
       const admin = this.mapRowToUser(rows[0]);
@@ -250,6 +251,11 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       updates.push(`crm = $${values.length}`);
     }
 
+    if (dto.image !== undefined) {
+      values.push(dto.image);
+      updates.push(`image = $${values.length}`);
+    }
+
     if (dto.password !== undefined) {
       values.push(await bcrypt.hash(dto.password, 10));
       updates.push(`password_hash = $${values.length}`);
@@ -299,6 +305,11 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
     if (dto.password !== undefined) {
       values.push(await bcrypt.hash(dto.password, 10));
       updates.push(`password_hash = $${values.length}`);
+    }
+
+    if (dto.image !== undefined) {
+      values.push(dto.image);
+      updates.push(`image = $${values.length}`);
     }
 
     if (!updates.length) {
@@ -352,6 +363,11 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       updates.push(`cpf = $${values.length}`);
     }
 
+    if (dto.image !== undefined) {
+      values.push(dto.image);
+      updates.push(`image = $${values.length}`);
+    }
+
     values.push(await bcrypt.hash(dto.newPassword, 10));
     updates.push(`password_hash = $${values.length}`);
 
@@ -384,7 +400,13 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
 
   async login(
     dto: LoginUserDto,
-  ): Promise<{ id: string; name: string; email: string; type: 'doctor' | 'admin' }> {
+  ): Promise<{
+    id: string;
+    name: string;
+    email: string;
+    image?: string;
+    type: 'doctor' | 'admin';
+  }> {
     const { rows } = await this.pool.query<UserRow>(
       'SELECT * FROM users WHERE email = $1 LIMIT 1',
       [dto.email.toLowerCase()],
@@ -405,13 +427,20 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       id: user.id,
       name: user.name,
       email: user.email,
+      image: user.image,
       type: user.type,
     };
   }
 
   async forgotPassword(
     dto: ForgotPasswordDto,
-  ): Promise<{ id: string; name: string; email: string; type: 'doctor' | 'admin' }> {
+  ): Promise<{
+    id: string;
+    name: string;
+    email: string;
+    image?: string;
+    type: 'doctor' | 'admin';
+  }> {
     const email = dto.email.toLowerCase();
     const resetCode = this.normalizeResetCode(dto.resetCode);
     const { rows } = await this.pool.query<UserRow>(
@@ -441,6 +470,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       id: updatedUser.id,
       name: updatedUser.name,
       email: updatedUser.email,
+      image: updatedUser.image,
       type: updatedUser.type,
     };
   }
@@ -723,6 +753,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       cpf: row.cpf ?? undefined,
       email: row.email,
       crm: row.crm ?? undefined,
+      image: row.image ?? undefined,
       type: row.type,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),

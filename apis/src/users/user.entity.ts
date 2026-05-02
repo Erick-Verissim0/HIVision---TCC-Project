@@ -7,6 +7,7 @@ export interface User {
   cpf?: string;
   email: string;
   crm?: string;
+  image?: string;
   type: UserType;
   createdAt: Date;
   updatedAt: Date;

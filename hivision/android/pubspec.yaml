@@ -29,6 +29,8 @@ flutter:
   assets:
     - assets/images/group_20.png
     - assets/images/group_21.png
+    - assets/images/group_23.png
+    - assets/images/check.png
 
 
 

@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, Length, Matches } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, Length, Matches } from 'class-validator';
 
 export class CreateDoctorDto {
   @IsString()
@@ -19,4 +19,8 @@ export class CreateDoctorDto {
   @IsString()
   @IsNotEmpty()
   crm: string;
+
+  @IsOptional()
+  @IsString()
+  image?: string;
 }

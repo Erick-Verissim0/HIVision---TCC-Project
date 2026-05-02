@@ -23,4 +23,8 @@ export class UpdateProfileDto {
   @IsString()
   @Matches(/^(\d{11}|\d{3}\.\d{3}\.\d{3}-\d{2})$/)
   cpf?: string;
+
+  @IsOptional()
+  @IsString()
+  image?: string;
 }

@@ -407,37 +407,52 @@ class _EntryScreenState extends State<EntryScreen> {
             const Spacer(),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 26),
-              child: SizedBox(
-                width: double.infinity,
-                height: 60,
-                child: ElevatedButton(
-                  onPressed: _loading ? null : _handleEnter,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.wine,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
-                    minimumSize: const Size.fromHeight(60),
-                    elevation: 0,
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      const Text('Entrar', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
-                      if (_loading)
-                        const Align(
-                          alignment: Alignment.centerRight,
-                          child: Padding(
-                            padding: EdgeInsets.only(right: 18),
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _loading ? null : _handleEnter,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.wine,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+                        minimumSize: const Size.fromHeight(52),
+                        elevation: 0,
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          const Text('Entrar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                          if (_loading)
+                            const Align(
+                              alignment: Alignment.centerRight,
+                              child: Padding(
+                                padding: EdgeInsets.only(right: 18),
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Este software foi desenvolvido em parceria com o Centro de Inovação Tecnológica do Cesmac e trata-se de um produto de dissertação do Programa de Pós-graduação Profissional em Biotecnologia em Saúde Humana e Animal da Universidade Estadual do Ceará em associação com o Centro Universitário Cesmac.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textDark,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -561,15 +576,15 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Container(
                 color: AppColors.wine,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                  padding: const EdgeInsets.fromLTRB(32, 40, 32, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                     const Text(
-                      'Bem-Vindo',
+                      'Bem-vindo(a)!',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 52,
+                        fontSize: 40,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -595,9 +610,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         padding: EdgeInsets.symmetric(vertical: 2),
                         child: Row(
                           children: [
-                            Icon(Icons.info_outline, color: Colors.white, size: 18),
+                            Icon(Icons.info_outline, color: Colors.white, size: 16),
                             SizedBox(width: 8),
-                            Text('Esqueci minha senha', style: TextStyle(color: Colors.white, fontSize: 20)),
+                            Text('Esqueci minha senha', style: TextStyle(color: Colors.white, fontSize: 16)),
                           ],
                         ),
                       ),
@@ -634,23 +649,23 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 34),
                     SizedBox(
                       width: double.infinity,
-                      height: 60,
+                      height: 52,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.paleRose,
                           foregroundColor: AppColors.textDark,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(42),
-                            side: const BorderSide(color: Colors.white, width: 3),
+                            side: const BorderSide(color: Colors.white, width: 2.5),
                           ),
-                          minimumSize: const Size.fromHeight(60),
+                          minimumSize: const Size.fromHeight(52),
                           elevation: 0,
                         ),
                         onPressed: _loading ? null : _login,
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
-                            const Text('Entrar', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+                            const Text('Entrar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                             if (_loading)
                               const Align(
                                 alignment: Alignment.centerRight,
@@ -681,7 +696,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               text: 'Cadastre-se',
                               style: const TextStyle(
                                 decoration: TextDecoration.underline,
-                                color: AppColors.paleRose,
+                                color: Color(0xFFFFD600),
+                                fontWeight: FontWeight.w700,
                               ),
                               recognizer: _cadastreTapRecognizer
                                 ..onTap = () {
@@ -782,7 +798,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Image.asset('assets/images/group_21.png', width: 52, fit: BoxFit.contain),
+                    Image.asset('assets/images/group_20.png', width: 52, fit: BoxFit.contain),
                     const SizedBox(width: 10),
                     const Text(
                       'HIVision',
@@ -801,7 +817,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   children: [
                     const Text(
                       'Esqueceu a senha?',
-                      style: TextStyle(color: AppColors.textDark, fontSize: 40, fontWeight: FontWeight.w700),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: AppColors.textDark, fontSize: 30, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 12),
                     const Text(
@@ -936,7 +954,7 @@ class _ForgotPasswordConfirmationScreenState extends State<ForgotPasswordConfirm
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Image.asset('assets/images/group_21.png', width: 52, fit: BoxFit.contain),
+                    Image.asset('assets/images/group_20.png', width: 52, fit: BoxFit.contain),
                     const SizedBox(width: 10),
                     const Text(
                       'HIVision',
@@ -950,100 +968,111 @@ class _ForgotPasswordConfirmationScreenState extends State<ForgotPasswordConfirm
               child: Container(
                 color: AppColors.lightBackground,
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                child: SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: MediaQuery.of(context).size.height * 0.6,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.arrow_back, color: AppColors.textDark, size: 28),
-                        ),
-                        const Expanded(
-                          child: Text(
-                            'Confirmar e-mail',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.textDark, fontSize: 46, fontWeight: FontWeight.w700),
+                      Align(
+                        alignment: Alignment.topLeft,
+                        child: Transform.translate(
+                          offset: const Offset(0, -34),
+                          child: IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.arrow_back, color: AppColors.textDark, size: 24),
                           ),
                         ),
-                        const SizedBox(width: 48),
-                      ],
-                    ),
-                    const SizedBox(height: 44),
-                    const Center(
-                      child: Icon(Icons.mark_email_read_outlined, color: AppColors.textDark, size: 120),
-                    ),
-                    const SizedBox(height: 40),
-                    const Center(
-                      child: Text(
-                        'Enviamos um código de recuperação para:',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 20, color: Color(0xFF222222)),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Text(
-                        widget.email,
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Confirmar e-mail',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          color: AppColors.textDark,
-                          fontWeight: FontWeight.w700,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: AppColors.textDark, fontSize: 24, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 20),
+                      const Center(
+                        child: Icon(Icons.mark_email_read_outlined, color: AppColors.textDark, size: 80),
+                      ),
+                      const SizedBox(height: 18),
+                      const Center(
+                        child: Text(
+                          'Enviamos um código de recuperação para:',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16, color: Color(0xFF222222)),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 18),
-                    const Center(
-                      child: Text(
-                        'Verifique sua caixa de entrada e use o código para definir sua nova senha.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 20, color: Color(0xFF222222), height: 1.2),
-                      ),
-                    ),
-                    const SizedBox(height: 26),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 58,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => NewPasswordScreen(email: widget.email),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.wine,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-                          elevation: 0,
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Text(
+                          widget.email,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                        child: const Text('Recebi o e-mail', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 58,
-                      child: ElevatedButton(
-                        onPressed: _resending ? null : _resend,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.paleRose,
-                          foregroundColor: AppColors.textDark,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-                          elevation: 0,
+                      const SizedBox(height: 12),
+                      const Center(
+                        child: Text(
+                          'Verifique sua caixa de entrada e use o código para definir sua nova senha.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16, color: Color(0xFF222222), height: 1.2),
                         ),
-                        child: _resending
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2.2, color: AppColors.textDark),
-                              )
-                            : const Text('Reenviar E-mail', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => NewPasswordScreen(email: widget.email),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.wine,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                            elevation: 0,
+                          ),
+                          child: const Text('Recebi o e-mail', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: _resending ? null : _resend,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.paleRose,
+                            foregroundColor: AppColors.textDark,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                            elevation: 0,
+                          ),
+                          child: _resending
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2.2, color: AppColors.textDark),
+                                )
+                              : const Text('Reenviar E-mail', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  ),
                 ),
               ),
             ),
@@ -1123,32 +1152,22 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
         resetCode: resetCode,
         newPassword: newPassword,
       );
-    } catch (error) {
+
       if (!mounted) return;
-      final message = error.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Senha redefinida com sucesso.')),
+      );
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
-        if (message.contains('User not found')) {
-          _errorMessage = 'Não encontramos conta para este e-mail.';
-        } else if (message.contains('inválido') || message.contains('expirado')) {
-          _errorMessage = 'Código inválido ou expirado.';
-        } else {
-          _errorMessage = 'Não foi possível redefinir a senha.';
-        }
+        _errorMessage = 'Não foi possível redefinir a senha.';
       });
-      return;
     }
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Senha atualizada com sucesso!')),
-    );
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HivisionShell()),
-      (route) => false,
-    );
   }
 
   @override
@@ -1166,7 +1185,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Image.asset('assets/images/group_21.png', width: 52, fit: BoxFit.contain),
+                    Image.asset('assets/images/group_20.png', width: 52, fit: BoxFit.contain),
                     const SizedBox(width: 10),
                     const Text(
                       'HIVision',
@@ -1180,93 +1199,139 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
               child: Container(
                 color: AppColors.lightBackground,
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Nova senha',
-                      style: TextStyle(color: AppColors.textDark, fontSize: 40, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Conta: ${widget.email}',
-                      style: const TextStyle(color: Color(0xFF222222), fontSize: 18),
-                    ),
-                    const SizedBox(height: 30),
-                    const Text(
-                      'Código de recuperação',
-                      style: TextStyle(color: Color(0xFF333333), fontSize: 24, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 12),
-                    _RoundedInput(
-                      hint: '000000',
-                      controller: _codeController,
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Nova senha',
-                      style: TextStyle(color: Color(0xFF333333), fontSize: 24, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 12),
-                    _RoundedInput(
-                      hint: 'Digite a nova senha',
-                      obscure: true,
-                      controller: _newPasswordController,
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Confirmar senha',
-                      style: TextStyle(color: Color(0xFF333333), fontSize: 24, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 12),
-                    _RoundedInput(
-                      hint: 'Digite novamente',
-                      obscure: true,
-                      controller: _confirmPasswordController,
-                    ),
-                    if (_errorMessage != null) ...[
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Criar nova senha',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: AppColors.textDark, fontSize: 34, fontWeight: FontWeight.w700),
+                      ),
                       const SizedBox(height: 12),
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(color: Color(0xFF9E1A1A), fontSize: 18, fontWeight: FontWeight.w600),
+                      const Text(
+                        'Crie uma senha forte para manter sua conta protegida. Depois é só salvar e voltar ao aplicativo.',
+                        style: TextStyle(color: Color(0xFF222222), fontSize: 18, height: 1.25),
+                      ),
+                      const SizedBox(height: 30),
+                      const Text(
+                        'Código de recuperação',
+                        style: TextStyle(color: Color(0xFF333333), fontSize: 24, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 12),
+                      _RoundedInput(
+                        hint: '000000',
+                        controller: _codeController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Nova senha',
+                        style: TextStyle(color: Color(0xFF333333), fontSize: 24, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 12),
+                      _RoundedInput(
+                        hint: 'Nova senha',
+                        obscure: true,
+                        controller: _newPasswordController,
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Confirmar senha',
+                        style: TextStyle(color: Color(0xFF333333), fontSize: 24, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 12),
+                      _RoundedInput(
+                        hint: 'Confirmar senha',
+                        obscure: true,
+                        controller: _confirmPasswordController,
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Image.asset(
+                            'assets/images/check.png',
+                            width: 18,
+                            height: 18,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.check_circle, size: 18, color: Color(0xFF45B36B)),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Mínimo de 6 caracteres',
+                            style: TextStyle(color: Color(0xFF444444), fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _errorMessage!,
+                          style: const TextStyle(color: Color(0xFF9E1A1A), fontSize: 18, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                      const SizedBox(height: 30),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 54,
+                              child: OutlinedButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () {
+                                        Navigator.of(context).pushAndRemoveUntil(
+                                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                          (route) => false,
+                                        );
+                                      },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.wine,
+                                  side: const BorderSide(color: AppColors.wine, width: 2),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(42)),
+                                ),
+                                child: const Text('Cancelar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 54,
+                              child: ElevatedButton(
+                                onPressed: _loading ? null : _submit,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.wine,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(42)),
+                                  elevation: 0,
+                                ),
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const Text('Salvar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                                    if (_loading)
+                                      const Align(
+                                        alignment: Alignment.centerRight,
+                                        child: Padding(
+                                          padding: EdgeInsets.only(right: 14),
+                                          child: SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                    const SizedBox(height: 30),
-                    Center(
-                      child: SizedBox(
-                        width: 260,
-                        height: 54,
-                        child: ElevatedButton(
-                          onPressed: _loading ? null : _submit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.wine,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(42)),
-                            elevation: 0,
-                          ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              const Text('Salvar nova senha', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                              if (_loading)
-                                const Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Padding(
-                                    padding: EdgeInsets.only(right: 18),
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1427,23 +1492,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     children: [
                     const Text(
                       'Cadastrar-se',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 52,
+                        fontSize: 36,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 28),
                     const Text(
                       'Nome Completo:',
-                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
                     _RoundedInput(hint: '', controller: _nameController),
                     const SizedBox(height: 20),
                     const Text(
                       'CPF:',
-                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
                     _RoundedInput(
@@ -1455,28 +1522,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 20),
                     const Text(
                       'CRM:',
-                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
                     _RoundedInput(hint: '', controller: _crmController),
                     const SizedBox(height: 20),
                     const Text(
                       'Email:',
-                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
                     _RoundedInput(hint: 'exemplo@dominio.com', controller: _emailController),
                     const SizedBox(height: 20),
                     const Text(
                       'Senha:',
-                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
                     _RoundedInput(hint: 'Senha', obscure: true, controller: _passwordController),
                     const SizedBox(height: 20),
                     const Text(
                       'Confirmar senha:',
-                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
                     _RoundedInput(hint: 'Senha', obscure: true, controller: _confirmPasswordController),
@@ -1499,7 +1566,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 _errorMessage!,
                                 style: const TextStyle(
                                   color: Color(0xFFFFEAEA),
-                                  fontSize: 20,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                   height: 1.2,
                                 ),
@@ -1528,7 +1595,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
-                            const Text('Criar Conta', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+                            const Text('Criar Conta', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                             if (_loading)
                               const Align(
                                 alignment: Alignment.centerRight,
@@ -2360,14 +2427,16 @@ class _RoundedInput extends StatelessWidget {
       obscureText: obscure,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
-      style: const TextStyle(fontSize: 28),
+      textAlign: TextAlign.left,
+      textAlignVertical: TextAlignVertical.center,
+      style: const TextStyle(fontSize: 16),
       decoration: InputDecoration(
         filled: true,
         fillColor: Colors.white,
         hintText: hint,
-        hintStyle: const TextStyle(color: Color(0xFF979797), fontSize: 28),
+        hintStyle: const TextStyle(color: Color(0xFF979797), fontSize: 16),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       ),
     );
   }

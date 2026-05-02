@@ -1,8 +1,13 @@
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+const _kHasLoggedIn = 'has_logged_in';
+const _kLoggedUserJson = 'logged_user_json';
 
 void main() {
   runApp(const HivisionWebApp());
@@ -16,14 +21,75 @@ class AppColors {
   static const textDark = Color(0xFF5C0000);
 }
 
+class ApiPatient {
+  ApiPatient({required this.id, required this.name, required this.cpf});
+
+  final String id;
+  final String name;
+  final String cpf;
+
+  String get initials {
+    final parts = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    if (parts.isEmpty) return '--';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  factory ApiPatient.fromJson(Map<String, dynamic> json) {
+    return ApiPatient(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'Paciente',
+      cpf: json['cpf']?.toString() ?? '',
+    );
+  }
+}
+
+class ApiAppointment {
+  ApiAppointment({required this.id, required this.patientId, required this.appointmentDate});
+
+  final String id;
+  final String patientId;
+  final DateTime appointmentDate;
+
+  factory ApiAppointment.fromJson(Map<String, dynamic> json) {
+    return ApiAppointment(
+      id: json['id']?.toString() ?? '',
+      patientId: json['patientId']?.toString() ?? '',
+      appointmentDate: _parseDate(json['appointmentDate']) ?? DateTime.now(),
+    );
+  }
+}
+
+DateTime? _parseDate(dynamic raw) {
+  if (raw == null) return null;
+  return DateTime.tryParse(raw.toString());
+}
+
+String _formatDateTime(DateTime value) {
+  final day = value.day.toString().padLeft(2, '0');
+  final month = value.month.toString().padLeft(2, '0');
+  final year = value.year.toString();
+  final hour = value.hour.toString().padLeft(2, '0');
+  final minute = value.minute.toString().padLeft(2, '0');
+  return '$day/$month/$year $hour:$minute';
+}
+
+String _formatDate(DateTime value) {
+  final day = value.day.toString().padLeft(2, '0');
+  final month = value.month.toString().padLeft(2, '0');
+  final year = value.year.toString();
+  return '$day/$month/$year';
+}
+
 class ApiUser {
-  ApiUser({required this.id, required this.name, required this.email, this.crm, this.type});
+  ApiUser({required this.id, required this.name, required this.email, this.crm, this.type, this.image});
 
   final String id;
   final String name;
   final String email;
   final String? crm;
   final String? type;
+  final String? image;
 
   String get firstName {
     final parts = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
@@ -38,14 +104,56 @@ class ApiUser {
       email: json['email']?.toString() ?? '',
       crm: json['crm']?.toString(),
       type: json['type']?.toString(),
+      image: json['image']?.toString(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'email': email,
+      'crm': crm,
+      'type': type,
+      'image': image,
+    };
   }
 }
 
 class ApiClient {
   static const String _baseUrl = 'http://localhost:3001';
 
-  Future<void> login({required String email, required String password}) async {
+  Future<List<ApiPatient>> fetchPatients() async {
+    final uri = Uri.parse('$_baseUrl/patients');
+    final response = await http.get(uri);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Erro ao carregar pacientes (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    final list = _extractList(decoded);
+    return list.whereType<Map<String, dynamic>>().map(ApiPatient.fromJson).toList();
+  }
+
+  Future<List<ApiAppointment>> fetchAppointments() async {
+    final uri = Uri.parse('$_baseUrl/appointments');
+    final response = await http.get(uri);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Erro ao carregar atendimentos (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    final list = _extractList(decoded);
+    return list.whereType<Map<String, dynamic>>().map(ApiAppointment.fromJson).toList();
+  }
+
+  List<dynamic> _extractList(dynamic decoded) {
+    if (decoded is List<dynamic>) return decoded;
+    if (decoded is Map<String, dynamic> && decoded['data'] is List<dynamic>) {
+      return decoded['data'] as List<dynamic>;
+    }
+    return const [];
+  }
+
+  Future<ApiUser> login({required String email, required String password}) async {
     final uri = Uri.parse('$_baseUrl/users/login');
     final response = await http.post(
       uri,
@@ -53,7 +161,13 @@ class ApiClient {
       body: jsonEncode({'email': email.trim().toLowerCase(), 'password': password}),
     );
 
-    if (response.statusCode >= 200 && response.statusCode < 300) return;
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        return ApiUser.fromJson(decoded);
+      }
+      throw Exception('Resposta inválida ao realizar login');
+    }
 
     final message = _extractErrorMessage(response.body);
     if (message == 'Invalid credentials') {
@@ -116,7 +230,37 @@ class ApiClient {
     throw Exception(message ?? 'Erro ao solicitar recuperação (${response.statusCode})');
   }
 
-  Future<void> resetPassword({
+  Future<ApiUser> updateProfile({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+    String? name,
+    String? email,
+    String? image,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/profile/$userId');
+    final bodyMap = <String, dynamic>{
+      'currentPassword': currentPassword,
+      'newPassword': newPassword,
+    };
+    if (name != null && name.trim().isNotEmpty) bodyMap['name'] = name.trim();
+    if (email != null && email.trim().isNotEmpty) bodyMap['email'] = email.trim().toLowerCase();
+    if (image != null && image.trim().isNotEmpty) bodyMap['image'] = image.trim();
+    final response = await http.patch(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode(bodyMap),
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) return ApiUser.fromJson(decoded);
+      throw Exception('Resposta inválida ao atualizar perfil');
+    }
+    final message = _extractErrorMessage(response.body);
+    throw Exception(message ?? 'Erro ao atualizar perfil (${response.statusCode})');
+  }
+
+  Future<ApiUser> resetPassword({
     required String email,
     required String resetCode,
     required String newPassword,
@@ -132,7 +276,13 @@ class ApiClient {
       }),
     );
 
-    if (response.statusCode >= 200 && response.statusCode < 300) return;
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        return ApiUser.fromJson(decoded);
+      }
+      throw Exception('Resposta inválida ao redefinir senha');
+    }
 
     final message = _extractErrorMessage(response.body);
     throw Exception(message ?? 'Erro ao redefinir senha (${response.statusCode})');
@@ -166,7 +316,49 @@ class HivisionWebApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.lightBackground,
         fontFamily: 'SF Pro Display',
       ),
-      home: const LoginScreen(),
+      home: const EntryScreen(),
+    );
+  }
+}
+
+class EntryScreen extends StatefulWidget {
+  const EntryScreen({super.key});
+
+  @override
+  State<EntryScreen> createState() => _EntryScreenState();
+}
+
+class _EntryScreenState extends State<EntryScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkLogin());
+  }
+
+  Future<void> _checkLogin() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasLoggedIn = prefs.getBool(_kHasLoggedIn) ?? false;
+      final loggedUser = _readLoggedUserFromPrefs(prefs);
+      if (!mounted) return;
+      if (hasLoggedIn && loggedUser != null) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => HivisionShell(currentUser: loggedUser)),
+        );
+        return;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: AppColors.lightBackground,
+      body: Center(child: CircularProgressIndicator()),
     );
   }
 }
@@ -210,8 +402,9 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
 
+    late final ApiUser loggedUser;
     try {
-      await _apiClient.login(email: email, password: password);
+      loggedUser = await _apiClient.login(email: email, password: password);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -222,15 +415,47 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const HivisionShell()));
+
+    // Persist session in background so storage issues do not block navigation.
+    Future<void>(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await _persistLoggedUser(prefs, loggedUser);
+      } catch (_) {}
+    });
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => HivisionShell(currentUser: loggedUser)),
+      (_) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return _AuthSplitLayout(
-      lightContent: const _HivisionLogoBlock(logoAsset: 'assets/images/group_21.png'),
+      lightContent: const _HivisionLogoBlock(
+        logoAsset: 'assets/images/group_21.png',
+      ),
+      lightBottomContent: LayoutBuilder(
+        builder: (context, constraints) {
+          final screenWidth = MediaQuery.of(context).size.width;
+          return SizedBox(
+            width: screenWidth * 0.8,
+            child: const Text(
+              'Este software foi desenvolvido em parceria com o Centro de Inovação Tecnológica do Cesmac e trata-se de um produto de dissertação do Programa de Pós-graduação Profissional em Biotecnologia em Saúde Humana e Animal da Universidade Estadual do Ceará em associação com o Centro Universitário Cesmac.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: AppColors.textDark,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          );
+        },
+      ),
       darkHeaderImage: 'assets/images/group_20.png',
-      title: 'Bem-Vindo',
+      title: 'Bem-vindo(a)!',
       subtitle: '',
       fields: [
         _AuthField(label: 'Email', compact: true, child: _AuthTextField(controller: _emailController, hint: 'exemplo@dominio.com', compact: true)),
@@ -261,7 +486,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (_error != null)
           Text(_error!, style: const TextStyle(color: Color(0xFFFFDCDC), fontSize: 13, fontWeight: FontWeight.w600)),
         const SizedBox(height: 14),
-        _AuthButton(text: 'Entrar', small: true, loading: _loading, onPressed: _loading ? null : _submit),
+        _AuthButton(text: 'Entrar', loading: _loading, onPressed: _loading ? null : _submit),
         const SizedBox(height: 32),
         Center(
           child: RichText(
@@ -271,7 +496,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const TextSpan(text: 'Não tem conta? '),
                 TextSpan(
                   text: 'Cadastre-se',
-                  style: const TextStyle(decoration: TextDecoration.underline, color: AppColors.paleRose),
+                  style: const TextStyle(decoration: TextDecoration.underline, color: Color(0xFFFFD600), fontWeight: FontWeight.w700),
                   recognizer: _signupTapRecognizer
                     ..onTap = () {
                       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegisterScreen()));
@@ -295,12 +520,12 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final ApiClient _apiClient = ApiClient();
-  final _nameController = TextEditingController();
-  final _cpfController = TextEditingController();
-  final _crmController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmController = TextEditingController();
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _crmController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmController = TextEditingController();
 
   bool _loading = false;
   String? _error;
@@ -308,7 +533,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _cpfController.dispose();
     _crmController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -320,13 +544,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_loading) return;
 
     final name = _nameController.text.trim();
-    final cpf = _cpfController.text.replaceAll(RegExp(r'\D'), '');
     final crm = _crmController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     final confirm = _confirmController.text;
 
-    if ([name, crm, email, password, confirm].any((v) => v.isEmpty)) {
+    if (name.isEmpty || crm.isEmpty || email.isEmpty || password.isEmpty || confirm.isEmpty) {
       setState(() => _error = 'Preencha todos os campos.');
       return;
     }
@@ -343,7 +566,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     late final ApiUser createdUser;
     try {
-      createdUser = await _apiClient.register(name: name, cpf: cpf, crm: crm, email: email, password: password);
+      createdUser = await _apiClient.register(
+        name: name,
+        cpf: '00000000000',
+        crm: crm,
+        email: email,
+        password: password,
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -353,6 +582,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+    if (!mounted) return;
+    final prefs = await SharedPreferences.getInstance();
+    await _persistLoggedUser(prefs, createdUser);
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => HivisionShell(currentUser: createdUser)),
@@ -463,6 +695,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       loading: _loading,
       showPanelBrand: false,
       centerPanelContent: true,
+      centerTitle: true,
       compact: true,
       customButtons: [
         if (_error != null) ...[
@@ -544,6 +777,14 @@ class _ForgotPasswordConfirmationScreenState extends State<ForgotPasswordConfirm
             style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.3),
           ),
         ),
+        const SizedBox(height: 10),
+        const Center(
+          child: Text(
+            'Por favor, verifique sua caixa de entrada para verificar se o e-mail chegou.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white, fontSize: 14, height: 1.3),
+          ),
+        ),
         const SizedBox(height: 24),
         _AuthButton(text: 'Recebi o e-mail', small: true, slim: true, onPressed: () {
           Navigator.of(context).push(MaterialPageRoute(builder: (_) => NewPasswordScreen(email: widget.email)));
@@ -556,6 +797,7 @@ class _ForgotPasswordConfirmationScreenState extends State<ForgotPasswordConfirm
       loading: false,
       showPanelBrand: false,
       centerPanelContent: true,
+      centerTitle: true,
       compact: true,
     );
   }
@@ -614,8 +856,9 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
       _error = null;
     });
 
+    late final ApiUser loggedUser;
     try {
-      await _apiClient.resetPassword(email: widget.email, resetCode: code, newPassword: pass);
+      loggedUser = await _apiClient.resetPassword(email: widget.email, resetCode: code, newPassword: pass);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -626,7 +869,10 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
     }
 
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const HivisionShell()), (_) => false);
+    final prefs = await SharedPreferences.getInstance();
+    await _persistLoggedUser(prefs, loggedUser);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => HivisionShell(currentUser: loggedUser)), (_) => false);
   }
 
   @override
@@ -635,11 +881,31 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
       lightContent: const _HivisionLogoBlock(logoAsset: 'assets/images/group_21.png'),
       darkHeaderImage: 'assets/images/group_21.png',
       title: 'Criar Nova Senha',
-      subtitle: '',
+      subtitle: 'Crie uma senha forte para manter sua conta protegida. Depois é só salvar e voltar ao aplicativo.',
       fields: [
         _AuthField(label: 'Código de recuperação', compact: true, child: _AuthTextField(controller: _codeController, hint: '000000', compact: true)),
         _AuthField(label: 'Nova senha', compact: true, child: _AuthTextField(controller: _newPasswordController, hint: 'Nova senha', obscure: true, compact: true)),
         _AuthField(label: 'Confirmar senha', compact: true, child: _AuthTextField(controller: _confirmController, hint: 'Confirmar senha', obscure: true, compact: true)),
+        const SizedBox(height: 2),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/images/check.png',
+                width: 16,
+                height: 16,
+                errorBuilder: (_, __, ___) => const Icon(Icons.check_circle, size: 16, color: Color(0xFF45B36B)),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Mínimo de 6 caracteres',
+                style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
       ],
       footer: null,
       onSubmit: null,
@@ -647,6 +913,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
       loading: false,
       showPanelBrand: false,
       centerPanelContent: true,
+      centerSubtitle: false,
       compact: true,
       customButtons: [
         if (_error != null) ...[
@@ -655,6 +922,22 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
         ],
         Row(
           children: [
+            Expanded(
+              child: SizedBox(
+                height: 42,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white, width: 2),
+                    backgroundColor: AppColors.wine,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                  child: const Text('Cancelar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: SizedBox(
                 height: 42,
@@ -669,22 +952,6 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                   child: _loading
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2.2, color: AppColors.textDark))
                       : const Text('Salvar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SizedBox(
-                height: 42,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white, width: 2),
-                    backgroundColor: AppColors.wine,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                  ),
-                  child: const Text('Cancelar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
                 ),
               ),
             ),
@@ -707,13 +974,16 @@ class _AuthSplitLayout extends StatelessWidget {
     required this.loading,
     this.footer,
     this.customButtons,
-    this.winePanelOnLeft = false,
     this.centerPanelContent = false,
+    this.centerTitle = false,
+    this.centerSubtitle,
     this.showPanelBrand = true,
     this.compact = false,
+    this.lightBottomContent,
   });
 
   final Widget lightContent;
+  final Widget? lightBottomContent;
   final String darkHeaderImage;
   final String title;
   final String subtitle;
@@ -723,8 +993,9 @@ class _AuthSplitLayout extends StatelessWidget {
   final bool loading;
   final Widget? footer;
   final List<Widget>? customButtons;
-  final bool winePanelOnLeft;
   final bool centerPanelContent;
+  final bool centerTitle;
+  final bool? centerSubtitle;
   final bool showPanelBrand;
   final bool compact;
 
@@ -747,10 +1018,21 @@ class _AuthSplitLayout extends StatelessWidget {
           ),
           const SizedBox(height: 18),
         ],
-        Text(title, style: TextStyle(color: Colors.white, fontSize: compact ? 36.0 : 48.0, fontWeight: FontWeight.w700)),
+        Align(
+          alignment: centerTitle ? Alignment.center : Alignment.centerLeft,
+          child: Text(
+            title,
+            textAlign: centerTitle ? TextAlign.center : TextAlign.start,
+            style: TextStyle(color: Colors.white, fontSize: compact ? 36.0 : 48.0, fontWeight: FontWeight.w700),
+          ),
+        ),
         if (subtitle.isNotEmpty) ...[
           const SizedBox(height: 10),
-          Text(subtitle, textAlign: centerPanelContent ? TextAlign.center : TextAlign.start, style: TextStyle(color: Colors.white, fontSize: compact ? 14.0 : 17.0, height: 1.3)),
+          Text(
+            subtitle,
+            textAlign: (centerSubtitle ?? centerPanelContent) ? TextAlign.center : TextAlign.start,
+            style: TextStyle(color: Colors.white, fontSize: compact ? 14.0 : 17.0, height: 1.3),
+          ),
         ],
         const SizedBox(height: 18),
         ...fields,
@@ -792,16 +1074,32 @@ class _AuthSplitLayout extends StatelessWidget {
 
     final lightPanel = Container(
       color: AppColors.lightBackground,
-      child: Center(child: lightContent),
+      child: lightBottomContent != null
+          ? Stack(
+              children: [
+                Center(child: lightContent),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).size.height * 0.04,
+                      left: MediaQuery.of(context).size.width * 0.02,
+                      right: MediaQuery.of(context).size.width * 0.02,
+                    ),
+                    child: lightBottomContent,
+                  ),
+                ),
+              ],
+            )
+          : Center(child: lightContent),
     );
 
     return Scaffold(
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (winePanelOnLeft) Expanded(flex: 2, child: panel),
           Expanded(flex: 3, child: lightPanel),
-          if (!winePanelOnLeft) Expanded(flex: 2, child: panel),
+          Expanded(flex: 2, child: panel),
         ],
       ),
     );
@@ -891,9 +1189,9 @@ class _AuthButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = small ? 42.0 : 54.0;
-    final fontSize = small ? 16.0 : 24.0;
-    final loaderSize = small ? 16.0 : 20.0;
+    final height = small ? 36.0 : 48.0;
+    final fontSize = small ? 14.0 : 20.0;
+    final loaderSize = small ? 14.0 : 18.0;
 
     final button = SizedBox(
       width: slim ? 220 : double.infinity,
@@ -922,6 +1220,13 @@ class _AuthButton extends StatelessWidget {
   }
 }
 
+class DashboardData {
+  DashboardData({required this.appointments, required this.patientNames});
+
+  final List<ApiAppointment> appointments;
+  final Map<String, String> patientNames;
+}
+
 class HivisionShell extends StatefulWidget {
   const HivisionShell({super.key, this.currentUser});
 
@@ -931,7 +1236,7 @@ class HivisionShell extends StatefulWidget {
   State<HivisionShell> createState() => _HivisionShellState();
 }
 
-enum _DesktopSection { profile, patients, reports, consultation, settings, notifications }
+enum _DesktopSection { home, profile, patients, reports, consultation }
 enum _PatientsPane { newPatient, registered }
 
 class _PatientSummary {
@@ -943,9 +1248,11 @@ class _PatientSummary {
 }
 
 class _HivisionShellState extends State<HivisionShell> {
-  _DesktopSection _section = _DesktopSection.patients;
+  _DesktopSection _section = _DesktopSection.home;
   _PatientsPane _patientsPane = _PatientsPane.registered;
   _PatientSummary? _selectedPatient;
+  bool _isMiddlePanelOpen = false;
+  String _desktopSearchTerm = '';
 
   final List<_PatientSummary> _patients = const [
     _PatientSummary(initials: 'LS', name: 'Lucas Sampaio', lastVisit: '17/03/2026 14:35'),
@@ -964,33 +1271,49 @@ class _HivisionShellState extends State<HivisionShell> {
             onSelect: (section) {
               setState(() {
                 _section = section;
+                _isMiddlePanelOpen = section != _DesktopSection.home && section != _DesktopSection.profile;
                 if (section != _DesktopSection.patients) {
                   _selectedPatient = null;
                 }
               });
             },
           ),
-          _DesktopMiddlePanel(
-            section: _section,
-            currentUser: widget.currentUser,
-            patientsPane: _patientsPane,
-            onPatientsPaneChanged: (pane) {
-              setState(() {
-                _patientsPane = pane;
-                if (pane != _PatientsPane.registered) {
-                  _selectedPatient = null;
-                }
-              });
-            },
-          ),
+          if (_isMiddlePanelOpen && _section != _DesktopSection.home && _section != _DesktopSection.profile)
+            _DesktopMiddlePanel(
+              section: _section,
+              currentUser: widget.currentUser,
+              patientsPane: _patientsPane,
+              onPatientsPaneChanged: (pane) {
+                setState(() {
+                  _patientsPane = pane;
+                  if (pane != _PatientsPane.registered) {
+                    _selectedPatient = null;
+                  }
+                });
+              },
+              onClose: () => setState(() => _isMiddlePanelOpen = false),
+            ),
           Expanded(
             child: _DesktopMainArea(
               section: _section,
+              currentUser: widget.currentUser,
               patientsPane: _patientsPane,
               patients: _patients,
               selectedPatient: _selectedPatient,
               onSelectPatient: (patient) => setState(() => _selectedPatient = patient),
               onBackFromPatient: () => setState(() => _selectedPatient = null),
+              middlePanelOpen: _isMiddlePanelOpen,
+              onOpenMiddlePanel: () {
+                if (_section == _DesktopSection.home || _section == _DesktopSection.profile) return;
+                setState(() => _isMiddlePanelOpen = true);
+              },
+              searchTerm: _desktopSearchTerm,
+              onSearchChanged: (value) => setState(() => _desktopSearchTerm = value),
+              onSectionChanged: (s) => setState(() {
+                _section = s;
+                _isMiddlePanelOpen = s != _DesktopSection.home && s != _DesktopSection.profile;
+                if (s != _DesktopSection.patients) _selectedPatient = null;
+              }),
             ),
           ),
         ],
@@ -1015,9 +1338,24 @@ class _DesktopSidebar extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 22),
-            child: Image.asset('assets/images/frame_22.png', width: 140, fit: BoxFit.contain),
+            child: Row(
+              children: [
+                Image.asset('assets/images/group_20.png', width: 36, fit: BoxFit.contain),
+                const SizedBox(width: 8),
+                const Text(
+                  'HIVision',
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 18),
+          _DesktopSidebarItem(
+            icon: Icons.home_outlined,
+            label: 'Início',
+            active: section == _DesktopSection.home,
+            onTap: () => onSelect(_DesktopSection.home),
+          ),
           _DesktopSidebarItem(
             icon: Icons.badge_outlined,
             label: 'Meu Perfil',
@@ -1042,24 +1380,16 @@ class _DesktopSidebar extends StatelessWidget {
             active: section == _DesktopSection.consultation,
             onTap: () => onSelect(_DesktopSection.consultation),
           ),
-          _DesktopSidebarItem(
-            icon: Icons.settings_outlined,
-            label: 'Configuração',
-            active: section == _DesktopSection.settings,
-            onTap: () => onSelect(_DesktopSection.settings),
-          ),
-          _DesktopSidebarItem(
-            icon: Icons.notifications_none_outlined,
-            label: 'Notificações',
-            active: section == _DesktopSection.notifications,
-            onTap: () => onSelect(_DesktopSection.notifications),
-          ),
           const Spacer(),
           _DesktopSidebarItem(
             icon: Icons.logout,
             label: 'Sair',
             active: false,
-            onTap: () {
+            onTap: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove(_kHasLoggedIn);
+              await prefs.remove(_kLoggedUserJson);
+              if (!context.mounted) return;
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
                 (_) => false,
@@ -1120,16 +1450,18 @@ class _DesktopMiddlePanel extends StatelessWidget {
     this.currentUser,
     required this.patientsPane,
     required this.onPatientsPaneChanged,
+    required this.onClose,
   });
 
   final _DesktopSection section;
   final ApiUser? currentUser;
   final _PatientsPane patientsPane;
   final ValueChanged<_PatientsPane> onPatientsPaneChanged;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
-    final greetingName = currentUser?.name ?? 'Dra Luiza Siqueira';
+    final greetingName = _buildFirstAndLastName(currentUser?.name ?? 'Luiza Siqueira');
     return SizedBox(
       width: 340,
       child: Container(
@@ -1150,8 +1482,7 @@ class _DesktopMiddlePanel extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Olá,', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-                      Text(greetingName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600), maxLines: 2),
+                      Text('Olá, Dr(a) $greetingName', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600), maxLines: 2),
                       const SizedBox(height: 3),
                       const Text('17/03/2026', style: TextStyle(fontSize: 13)),
                     ],
@@ -1174,21 +1505,27 @@ class _DesktopMiddlePanel extends StatelessWidget {
                 active: patientsPane == _PatientsPane.registered,
                 onTap: () => onPatientsPaneChanged(_PatientsPane.registered),
               ),
-            ] else if (section == _DesktopSection.settings || section == _DesktopSection.profile) ...[
-              const _DesktopMiddleItem(icon: Icons.dashboard_outlined, label: 'Inicio', active: false),
-              const SizedBox(height: 8),
-              const _DesktopMiddleItem(icon: Icons.groups_outlined, label: 'Pacientes', active: false),
-              const SizedBox(height: 8),
-              const _DesktopMiddleItem(icon: Icons.history, label: 'Histórico', active: false),
-              const SizedBox(height: 8),
-              const _DesktopMiddleItem(icon: Icons.tune_outlined, label: 'Configurações', active: true),
+            ] else if (section == _DesktopSection.profile) ...[
+              const _DesktopMiddleItem(icon: Icons.manage_accounts_outlined, label: 'Alterar dados do perfil', active: true),
             ],
             const Spacer(),
             Row(
-              children: const [
-                Icon(Icons.logout, color: AppColors.textDark, size: 20),
-                SizedBox(width: 8),
-                Text('Sair', style: TextStyle(color: AppColors.textDark, fontSize: 16)),
+              children: [
+                const Spacer(),
+                InkWell(
+                  onTap: onClose,
+                  borderRadius: BorderRadius.circular(10),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.close, color: AppColors.textDark, size: 20),
+                        SizedBox(width: 6),
+                        Text('Fechar', style: TextStyle(color: AppColors.textDark, fontSize: 16)),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ],
@@ -1237,19 +1574,31 @@ class _DesktopMiddleItem extends StatelessWidget {
 class _DesktopMainArea extends StatelessWidget {
   const _DesktopMainArea({
     required this.section,
+    this.currentUser,
     required this.patientsPane,
     required this.patients,
     required this.selectedPatient,
     required this.onSelectPatient,
     required this.onBackFromPatient,
+    required this.middlePanelOpen,
+    required this.onOpenMiddlePanel,
+    required this.searchTerm,
+    required this.onSearchChanged,
+    required this.onSectionChanged,
   });
 
   final _DesktopSection section;
+  final ApiUser? currentUser;
   final _PatientsPane patientsPane;
   final List<_PatientSummary> patients;
   final _PatientSummary? selectedPatient;
   final ValueChanged<_PatientSummary> onSelectPatient;
   final VoidCallback onBackFromPatient;
+  final bool middlePanelOpen;
+  final VoidCallback onOpenMiddlePanel;
+  final String searchTerm;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<_DesktopSection> onSectionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1258,28 +1607,50 @@ class _DesktopMainArea extends StatelessWidget {
         Container(
           color: AppColors.wine,
           padding: const EdgeInsets.fromLTRB(34, 20, 34, 16),
-          child: Row(
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              Expanded(
+              // Search bar truly centered in the full header width
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
                 child: Container(
-                  height: 50,
+                  height: 42,
                   decoration: BoxDecoration(color: const Color(0xFFEEEEEE), borderRadius: BorderRadius.circular(18)),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.search, color: Color(0xFF888888), size: 24),
-                      SizedBox(width: 10),
-                      Text('Procurar paciente', style: TextStyle(fontSize: 16, color: Color(0xFF888888))),
-                    ],
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                  child: TextField(
+                    onChanged: onSearchChanged,
+                    textAlignVertical: TextAlignVertical.center,
+                    style: const TextStyle(fontSize: 16, color: AppColors.textDark),
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search, color: Color(0xFF888888), size: 22),
+                      prefixIconConstraints: BoxConstraints(minWidth: 34, minHeight: 34),
+                      hintText: 'Procurar paciente',
+                      hintStyle: TextStyle(fontSize: 16, color: Color(0xFF888888)),
+                      contentPadding: EdgeInsets.symmetric(vertical: 10),
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 14),
-              Container(
-                width: 50,
-                height: 50,
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: const Icon(Icons.tune, color: AppColors.wine, size: 24),
+              // Left-aligned doctor info on top of the stack
+              Row(
+                children: [
+                  if (!middlePanelOpen && section != _DesktopSection.home && section != _DesktopSection.profile) ...[
+                    InkWell(
+                      onTap: onOpenMiddlePanel,
+                      borderRadius: BorderRadius.circular(25),
+                      child: Container(
+                        width: 46,
+                        height: 46,
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        child: const Icon(Icons.chevron_right, color: AppColors.wine, size: 28),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  _CollapsedDoctorInfo(currentUser: currentUser),
+                ],
               ),
             ],
           ),
@@ -1287,7 +1658,7 @@ class _DesktopMainArea extends StatelessWidget {
         Expanded(
           child: Container(
             color: AppColors.lightBackground,
-            padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
             child: _buildMainContent(),
           ),
         ),
@@ -1296,6 +1667,14 @@ class _DesktopMainArea extends StatelessWidget {
   }
 
   Widget _buildMainContent() {
+    if (section == _DesktopSection.home) {
+      return _HomeSectionContent(
+        onSectionChanged: onSectionChanged,
+        searchTerm: searchTerm,
+        currentUser: currentUser,
+      );
+    }
+
     if (section == _DesktopSection.patients) {
       if (patientsPane == _PatientsPane.newPatient) {
         return const _NewPatientDesktopForm();
@@ -1303,11 +1682,11 @@ class _DesktopMainArea extends StatelessWidget {
       if (selectedPatient != null) {
         return _PatientProfileDesktop(patient: selectedPatient!, onBack: onBackFromPatient);
       }
-      return _PatientsListDesktop(patients: patients, onSelectPatient: onSelectPatient);
+      return _PatientsListDesktop(patients: patients, onSelectPatient: onSelectPatient, searchTerm: searchTerm);
     }
 
-    if (section == _DesktopSection.settings || section == _DesktopSection.profile) {
-      return const _SettingsDesktop();
+    if (section == _DesktopSection.profile) {
+      return _SettingsDesktop(currentUser: currentUser);
     }
 
     if (section == _DesktopSection.consultation) {
@@ -1325,17 +1704,344 @@ class _DesktopMainArea extends StatelessWidget {
     }
 
     return const _DesktopPlaceholder(
-      title: 'Notificações',
-      subtitle: 'Tela inserida no padrão Desktop para manter consistência visual com as artes.',
+      title: 'HIVision',
+      subtitle: 'Selecione uma opção no menu para continuar.',
+    );
+  }
+}
+
+class _CollapsedDoctorInfo extends StatelessWidget {
+  const _CollapsedDoctorInfo({this.currentUser});
+
+  final ApiUser? currentUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final greetingName = _buildFirstAndLastName(currentUser?.name ?? 'Luiza Siqueira');
+    final image = currentUser?.image?.trim();
+    final hasImage = image != null &&
+        image.isNotEmpty &&
+        (image.startsWith('http://') || image.startsWith('https://') || image.startsWith('data:image/'));
+
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 20,
+          backgroundColor: Colors.white,
+          backgroundImage: hasImage ? NetworkImage(image) : null,
+          child: hasImage
+              ? null
+              : Text(
+                  _buildInitials(greetingName),
+                  style: const TextStyle(color: AppColors.wine, fontWeight: FontWeight.w700),
+                ),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Olá, Dr(a) $greetingName',
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              _formatDate(DateTime.now()),
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeSectionContent extends StatefulWidget {
+  const _HomeSectionContent({required this.onSectionChanged, required this.searchTerm, this.currentUser});
+
+  final ValueChanged<_DesktopSection> onSectionChanged;
+  final String searchTerm;
+  final ApiUser? currentUser;
+
+  @override
+  State<_HomeSectionContent> createState() => _HomeSectionContentState();
+}
+
+class _HomeSectionContentState extends State<_HomeSectionContent> {
+  final ApiClient _api = ApiClient();
+  late Future<DashboardData> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _loadDashboard();
+  }
+
+  Future<DashboardData> _loadDashboard() async {
+    final patients = await _api.fetchPatients();
+    final appointments = await _api.fetchAppointments();
+    final patientNames = {for (final p in patients) p.id: p.name};
+    return DashboardData(appointments: appointments, patientNames: patientNames);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _DesktopSectionHeader(title: 'Início'),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 130),
+          child: Row(
+            children: [
+              Expanded(
+                child: _HomeActionCard(
+                  icon: Icons.medical_services_outlined,
+                  label: 'Nova consulta',
+                  onTap: () => widget.onSectionChanged(_DesktopSection.consultation),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _HomeActionCard(
+                  icon: Icons.person_add_alt_1_outlined,
+                  label: 'Novo paciente',
+                  onTap: () => widget.onSectionChanged(_DesktopSection.patients),
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: _HomeActionCard(
+                  icon: Icons.location_on_outlined,
+                  label: 'Locais',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 40),
+        const Padding(
+          padding: EdgeInsets.only(left: 42),
+          child: Text(
+            'Atendimentos Recentes',
+            style: TextStyle(fontSize: 27, fontWeight: FontWeight.w700, color: AppColors.textDark),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: FutureBuilder<DashboardData>(
+            future: _future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator(color: AppColors.wine));
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Falha ao carregar atendimentos do backend.',
+                        style: TextStyle(color: AppColors.textDark, fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => setState(() => _future = _loadDashboard()),
+                        child: const Text('Tentar novamente'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final data = snapshot.data!;
+              final sorted = [...data.appointments]
+                ..sort((a, b) {
+                  final aName = (data.patientNames[a.patientId] ?? 'Paciente').toLowerCase();
+                  final bName = (data.patientNames[b.patientId] ?? 'Paciente').toLowerCase();
+                  return aName.compareTo(bName);
+                });
+              final query = widget.searchTerm.trim().toLowerCase();
+              final visibleAppointments = sorted.where((appointment) {
+                final patientName = data.patientNames[appointment.patientId] ?? 'Paciente';
+                return query.isEmpty || patientName.toLowerCase().contains(query);
+              }).toList();
+
+              if (visibleAppointments.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'Nenhum atendimento encontrado para a busca.',
+                    style: TextStyle(color: AppColors.textDark, fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                itemCount: visibleAppointments.length > 8 ? 8 : visibleAppointments.length,
+                separatorBuilder: (_, i) => const Divider(color: Color(0x99B58F8F), thickness: 1),
+                itemBuilder: (_, index) {
+                  final appointment = visibleAppointments[index];
+                  final patientName = data.patientNames[appointment.patientId] ?? 'Paciente';
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(42, 8, 0, 8),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: Colors.transparent,
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0x99B58F8F)),
+                            ),
+                            child: Center(
+                              child: Text(
+                                _buildInitials(patientName),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  color: AppColors.textDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                patientName,
+                                style: const TextStyle(fontSize: 17, color: AppColors.textDark, fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  const Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textDark),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    _formatDateTime(appointment.appointmentDate),
+                                    style: const TextStyle(fontSize: 12, color: AppColors.textDark),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeUserSummaryCard extends StatelessWidget {
+  const _HomeUserSummaryCard({this.currentUser});
+
+  final ApiUser? currentUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = _buildFirstAndLastName(currentUser?.name ?? 'Profissional');
+    final image = currentUser?.image?.trim();
+    final hasImage = image != null &&
+        image.isNotEmpty &&
+        (image.startsWith('http://') || image.startsWith('https://') || image.startsWith('data:image/'));
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.sidePanel,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 27,
+            backgroundColor: AppColors.wine,
+            backgroundImage: hasImage ? NetworkImage(image) : null,
+            child: hasImage
+                ? null
+                : Text(
+                    _buildInitials(displayName),
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatDate(DateTime.now()),
+                  style: const TextStyle(fontSize: 14, color: Color(0xFF666666), fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+class _HomeActionCard extends StatelessWidget {
+  const _HomeActionCard({required this.icon, required this.label, this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        height: 94,
+        decoration: BoxDecoration(
+          color: AppColors.wine,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.wine),
+          boxShadow: const [
+            BoxShadow(color: Color(0x22000000), blurRadius: 10, offset: Offset(0, 4)),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 24),
+            const SizedBox(height: 6),
+            Text(label, style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
     );
   }
 }
 
 class _PatientsListDesktop extends StatelessWidget {
-  const _PatientsListDesktop({required this.patients, required this.onSelectPatient});
+  const _PatientsListDesktop({required this.patients, required this.onSelectPatient, required this.searchTerm});
 
   final List<_PatientSummary> patients;
   final ValueChanged<_PatientSummary> onSelectPatient;
+  final String searchTerm;
 
   @override
   Widget build(BuildContext context) {
@@ -1346,45 +2052,63 @@ class _PatientsListDesktop extends StatelessWidget {
         const SizedBox(height: 14),
         Row(
           children: const [
-            Expanded(child: Text('Lista de pacientes', style: TextStyle(fontSize: 34, fontWeight: FontWeight.w700))),
+            Expanded(child: Text('Lista de pacientes', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w700))),
             Text('Ordenar por', style: TextStyle(fontSize: 24, color: AppColors.textDark)),
           ],
         ),
         const SizedBox(height: 6),
         Expanded(
-          child: ListView.separated(
-            itemCount: patients.length,
-            separatorBuilder: (_, __) => const Divider(color: Color(0x99B58F8F), thickness: 1),
-            itemBuilder: (_, index) {
-              final patient = patients[index];
-              return InkWell(
-                onTap: () => onSelectPatient(patient),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Colors.transparent,
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0x99B58F8F))),
-                          child: Center(
-                            child: Text(
-                              patient.initials.substring(0, 1),
-                              style: const TextStyle(fontSize: 20, color: AppColors.textDark, fontWeight: FontWeight.w700),
+          child: Builder(
+            builder: (context) {
+              final query = searchTerm.trim().toLowerCase();
+              final visiblePatients = patients
+                  .where((patient) => query.isEmpty || patient.name.toLowerCase().contains(query))
+                  .toList();
+
+              if (visiblePatients.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'Nenhum paciente encontrado para a busca.',
+                    style: TextStyle(color: AppColors.textDark, fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                itemCount: visiblePatients.length,
+                separatorBuilder: (_, i) => const Divider(color: Color(0x99B58F8F), thickness: 1),
+                itemBuilder: (_, index) {
+                  final patient = visiblePatients[index];
+                  return InkWell(
+                    onTap: () => onSelectPatient(patient),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(42, 12, 0, 12),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Colors.transparent,
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0x99B58F8F))),
+                              child: Center(
+                                child: Text(
+                                  patient.initials.substring(0, 1),
+                                  style: const TextStyle(fontSize: 20, color: AppColors.textDark, fontWeight: FontWeight.w700),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(patient.name, style: const TextStyle(fontSize: 17, color: AppColors.textDark, fontWeight: FontWeight.w600)),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(patient.name, style: const TextStyle(fontSize: 22, color: AppColors.textDark, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -1501,70 +2225,473 @@ class _PatientProfileDesktop extends StatelessWidget {
   }
 }
 
-class _SettingsDesktop extends StatelessWidget {
-  const _SettingsDesktop();
+class _SettingsDesktop extends StatefulWidget {
+  const _SettingsDesktop({this.currentUser});
+  final ApiUser? currentUser;
+  @override
+  State<_SettingsDesktop> createState() => _SettingsDesktopState();
+}
+
+class _SettingsDesktopState extends State<_SettingsDesktop> {
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _imageCtrl = TextEditingController();
+  final _currentPassCtrl = TextEditingController();
+  final _newPassCtrl = TextEditingController();
+  bool _showNewPasswordField = false;
+  bool _loading = false;
+  String? _errorMsg;
+  String? _successMsg;
+  bool _nameEnabled = false;
+  bool _emailEnabled = false;
+  bool _currentPassEnabled = false;
+  bool _newPassEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl.text = widget.currentUser?.name ?? '';
+    _emailCtrl.text = widget.currentUser?.email ?? '';
+    _imageCtrl.text = widget.currentUser?.image ?? '';
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _imageCtrl.dispose();
+    _currentPassCtrl.dispose();
+    _newPassCtrl.dispose();
+    super.dispose();
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  ImageProvider? _resolveImageProvider(String? value) {
+    final raw = value?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.startsWith('data:image')) {
+      final commaIndex = raw.indexOf(',');
+      if (commaIndex <= 0) return null;
+      final b64 = raw.substring(commaIndex + 1);
+      try {
+        final bytes = base64Decode(b64);
+        return MemoryImage(bytes);
+      } catch (_) {
+        return null;
+      }
+    }
+    return NetworkImage(raw);
+  }
+
+  String _mimeFromExtension(String? ext) {
+    final e = (ext ?? '').toLowerCase();
+    if (e == 'png') return 'image/png';
+    if (e == 'jpg' || e == 'jpeg') return 'image/jpeg';
+    if (e == 'gif') return 'image/gif';
+    if (e == 'webp') return 'image/webp';
+    return 'image/png';
+  }
+
+  Future<void> _pickImage() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      setState(() {
+        _errorMsg = 'Nao foi possivel ler a imagem selecionada.';
+        _successMsg = null;
+      });
+      return;
+    }
+    final mime = _mimeFromExtension(file.extension);
+    final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
+    setState(() {
+      _imageCtrl.text = dataUrl;
+      _errorMsg = null;
+    });
+  }
+
+  Future<void> _save() async {
+    final currentPass = _currentPassCtrl.text.trim();
+    final newPass = _newPassCtrl.text.trim();
+
+    if (!_currentPassEnabled || currentPass.isEmpty) {
+      setState(() { _errorMsg = 'Clique no ícone de editar na "Senha atual" e digite sua senha para salvar.'; _successMsg = null; });
+      return;
+    }
+
+    if (currentPass.length < 6) {
+      setState(() { _errorMsg = 'A senha atual deve ter no mínimo 6 caracteres.'; _successMsg = null; });
+      return;
+    }
+
+    if (_showNewPasswordField && _newPassEnabled) {
+      if (newPass.isEmpty) {
+        setState(() { _errorMsg = 'Digite a nova senha.'; _successMsg = null; });
+        return;
+      }
+      if (newPass.length < 6) {
+        setState(() { _errorMsg = 'A nova senha deve ter no mínimo 6 caracteres.'; _successMsg = null; });
+        return;
+      }
+      if (newPass == currentPass) {
+        setState(() { _errorMsg = 'A nova senha deve ser diferente da senha atual.'; _successMsg = null; });
+        return;
+      }
+    }
+
+    final passwordToSave = (_showNewPasswordField && _newPassEnabled) ? newPass : currentPass;
+
+    // Always send existing image if no new one was selected
+    final existingImage = widget.currentUser?.image;
+    final imageToSave = _imageCtrl.text.trim().isNotEmpty ? _imageCtrl.text.trim() : existingImage;
+
+    setState(() { _loading = true; _errorMsg = null; _successMsg = null; });
+    try {
+      await ApiClient().updateProfile(
+        userId: widget.currentUser!.id,
+        currentPassword: currentPass,
+        newPassword: passwordToSave,
+        name: _nameEnabled && _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : null,
+        email: _emailEnabled && _emailCtrl.text.trim().isNotEmpty ? _emailCtrl.text.trim() : null,
+        image: imageToSave,
+      );
+      setState(() {
+        _successMsg = 'Dados atualizados com sucesso!';
+        _loading = false;
+        _nameEnabled = false;
+        _emailEnabled = false;
+        _currentPassEnabled = false;
+        _newPassEnabled = false;
+        _showNewPasswordField = false;
+      });
+      _currentPassCtrl.clear();
+      _newPassCtrl.clear();
+    } catch (e) {
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      final isWrongPassword = msg.toLowerCase().contains('invalid credentials') ||
+          msg.toLowerCase().contains('wrong password') ||
+          msg.toLowerCase().contains('incorrect') ||
+          msg.toLowerCase().contains('unauthorized') ||
+          msg.toLowerCase().contains('senha');
+      setState(() {
+        _errorMsg = isWrongPassword
+            ? 'Senha atual incorreta. Verifique e tente novamente.'
+            : msg;
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final name = widget.currentUser?.name ?? 'Médico';
+    final crm = widget.currentUser?.crm ?? '—';
+    final imageUrl = _imageCtrl.text.trim().isEmpty ? null : _imageCtrl.text.trim();
+    final imageProvider = _resolveImageProvider(imageUrl);
+    final initials = _initials(name);
+
     return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _DesktopSectionHeader(title: 'Perfil'),
-          const SizedBox(height: 12),
+          const _DesktopSectionHeader(title: 'Meu Perfil'),
+          const SizedBox(height: 24),
+          // Doctor info card with Sair button
           Container(
             height: 102,
-            decoration: BoxDecoration(color: AppColors.sidePanel, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: AppColors.sidePanel,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.wine.withOpacity(0.07),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
             child: Row(
               children: [
-                const SizedBox(width: 14),
-                const CircleAvatar(
+                const SizedBox(width: 18),
+                CircleAvatar(
                   radius: 30,
                   backgroundColor: AppColors.wine,
-                  child: Text('LS', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
+                  backgroundImage: imageProvider,
+                  child: imageProvider == null
+                      ? Text(initials, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700))
+                      : null,
                 ),
-                const SizedBox(width: 10),
-                const Column(
+                const SizedBox(width: 14),
+                Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Luiza Siqueira', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700)),
-                    Text('CRM: XXXXXXX-AL', style: TextStyle(fontSize: 14, color: Color(0xFF747474))),
+                    Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textDark)),
+                    const SizedBox(height: 2),
+                    Text('CRM: $crm', style: const TextStyle(fontSize: 14, color: Color(0xFF747474))),
                   ],
                 ),
                 const Spacer(),
-                Container(
-                  margin: const EdgeInsets.only(right: 14),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(color: AppColors.wine, borderRadius: BorderRadius.circular(22)),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.logout, color: Colors.white, size: 16),
-                      SizedBox(width: 6),
-                      Text('Sair', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                    ],
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      (_) => false,
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 18),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(color: AppColors.wine, borderRadius: BorderRadius.circular(22)),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.logout, color: Colors.white, size: 18),
+                        SizedBox(width: 8),
+                        Text('Sair', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
-          const Text('Alterar dados do perfil', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-          const SizedBox(height: 20),
-          const _DesktopFormLabel('Nome completo:'),
-          const _DesktopLargeInput(hint: 'Luiza Maria da Costa'),
-          const SizedBox(height: 8),
-          const _DesktopFormLabel('E-mail:'),
-          const _DesktopLargeInput(hint: 'exemplo@dominio.com'),
-          const SizedBox(height: 8),
-          const _DesktopFormLabel('CRM:'),
-          const _DesktopLargeInput(hint: '******'),
-          const SizedBox(height: 8),
-          const _DesktopFormLabel('Senha:'),
-          const _DesktopLargeInput(hint: '***********'),
-          const SizedBox(height: 20),
-          const _DesktopMainButton(text: 'Alterar dados'),
+          const SizedBox(height: 28),
+          // Page title
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: AppColors.wine.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.manage_accounts_outlined, color: AppColors.wine, size: 26),
+                ),
+                const SizedBox(width: 14),
+                const Text(
+                  'Alterar dados do perfil',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Form card
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.wine.withOpacity(0.07),
+                  blurRadius: 18,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(28, 28, 28, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _DesktopFormLabel('Nome completo:'),
+                _EditableInput(
+                  controller: _nameCtrl,
+                  hint: 'Seu nome completo',
+                  enabled: _nameEnabled,
+                  suffixIcon: IconButton(
+                    icon: Icon(_nameEnabled ? Icons.lock_open_outlined : Icons.edit_outlined, color: AppColors.wine, size: 20),
+                    onPressed: () => setState(() => _nameEnabled = !_nameEnabled),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const _DesktopFormLabel('E-mail:'),
+                _EditableInput(
+                  controller: _emailCtrl,
+                  hint: 'exemplo@dominio.com',
+                  keyboardType: TextInputType.emailAddress,
+                  enabled: _emailEnabled,
+                  suffixIcon: IconButton(
+                    icon: Icon(_emailEnabled ? Icons.lock_open_outlined : Icons.edit_outlined, color: AppColors.wine, size: 20),
+                    onPressed: () => setState(() => _emailEnabled = !_emailEnabled),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const _DesktopFormLabel('Imagem de perfil:'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 52,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: const Color(0xFF7A1717), width: 1.1),
+                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.white,
+                        ),
+                        child: Text(
+                          _imageCtrl.text.trim().isEmpty ? 'Nenhuma imagem selecionada' : 'Imagem selecionada com sucesso',
+                          style: const TextStyle(fontSize: 16, color: Color(0xFF666666)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        height: 52,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.wine,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.upload_file, color: Colors.white, size: 18),
+                            SizedBox(width: 8),
+                            Text('Selecionar imagem', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const _DesktopFormLabel('Senha atual:'),
+                _EditableInput(
+                  controller: _currentPassCtrl,
+                  hint: '••••••••••',
+                  obscure: true,
+                  enabled: _currentPassEnabled,
+                  suffixIcon: IconButton(
+                    icon: Icon(_currentPassEnabled ? Icons.lock_open_outlined : Icons.edit_outlined, color: AppColors.wine, size: 20),
+                    onPressed: () => setState(() {
+                      _currentPassEnabled = !_currentPassEnabled;
+                      if (!_currentPassEnabled) _currentPassCtrl.clear();
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                GestureDetector(
+                  onTap: () => setState(() => _showNewPasswordField = !_showNewPasswordField),
+                  child: Container(
+                    width: double.infinity,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8DDDD),
+                      border: Border.all(color: const Color(0xFF7A1717), width: 1.0),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.lock_reset, color: AppColors.textDark, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          _showNewPasswordField ? 'Cancelar alteracao de senha' : 'Alterar senha',
+                          style: const TextStyle(color: AppColors.textDark, fontSize: 14, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_showNewPasswordField) ...[
+                  const SizedBox(height: 16),
+                  const _DesktopFormLabel('Nova senha:'),
+                  _EditableInput(
+                    controller: _newPassCtrl,
+                    hint: '••••••••••',
+                    obscure: true,
+                    enabled: _newPassEnabled,
+                    suffixIcon: IconButton(
+                      icon: Icon(_newPassEnabled ? Icons.lock_open_outlined : Icons.edit_outlined, color: AppColors.wine, size: 20),
+                      onPressed: () => setState(() {
+                        _newPassEnabled = !_newPassEnabled;
+                        if (!_newPassEnabled) _newPassCtrl.clear();
+                      }),
+                    ),
+                  ),
+                ],
+                if (_errorMsg != null) ...[
+                  const SizedBox(height: 14),
+                  Text(_errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 14)),
+                ],
+                if (_successMsg != null) ...[
+                  const SizedBox(height: 14),
+                  Text(_successMsg!, style: const TextStyle(color: Colors.green, fontSize: 14)),
+                ],
+                const SizedBox(height: 28),
+                GestureDetector(
+                  onTap: _loading ? null : _save,
+                  child: Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: _loading ? const Color(0xFFB0B0B0) : AppColors.wine,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: _loading
+                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                          : const Text('Salvar alterações', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _EditableInput extends StatelessWidget {
+  const _EditableInput({required this.controller, required this.hint, this.obscure = false, this.keyboardType, this.enabled = true, this.suffixIcon});
+
+  final TextEditingController controller;
+  final String hint;
+  final bool obscure;
+  final TextInputType? keyboardType;
+  final bool enabled;
+  final Widget? suffixIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: enabled ? const Color(0xFF7A1717) : const Color(0xFFCCCCCC), width: 1.1),
+        borderRadius: BorderRadius.circular(10),
+        color: enabled ? Colors.white : const Color(0xFFF5F5F5),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        keyboardType: keyboardType,
+        readOnly: !enabled,
+        style: TextStyle(fontSize: 18, color: enabled ? AppColors.textDark : const Color(0xFF9E9E9E)),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(fontSize: 18, color: Color(0xFF8E8E8E)),
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          suffixIcon: suffixIcon,
+        ),
       ),
     );
   }
@@ -1624,7 +2751,7 @@ class _DesktopSectionHeader extends StatelessWidget {
             alignment: Alignment.centerRight,
             padding: const EdgeInsets.only(bottom: 7),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0x99B58F8F)))),
-            child: Text(title, style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: AppColors.textDark)),
+            child: Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textDark)),
           ),
         ),
       ],
@@ -1735,4 +2862,32 @@ String _buildInitials(String fullName) {
   if (parts.isEmpty) return '--';
   if (parts.length == 1) return parts.first[0].toUpperCase();
   return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+}
+
+String _buildFirstAndLastName(String fullName) {
+  final parts = fullName.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return 'Profissional';
+  if (parts.length == 1) return parts.first;
+  return '${parts.first} ${parts.last}';
+}
+
+Future<void> _persistLoggedUser(SharedPreferences prefs, ApiUser user) async {
+  await prefs.setBool(_kHasLoggedIn, true);
+  await prefs.setString(_kLoggedUserJson, jsonEncode(user.toJson()));
+}
+
+ApiUser? _readLoggedUserFromPrefs(SharedPreferences prefs) {
+  final rawJson = prefs.getString(_kLoggedUserJson);
+  if (rawJson == null || rawJson.trim().isEmpty) return null;
+
+  try {
+    final decoded = jsonDecode(rawJson);
+    if (decoded is Map<String, dynamic>) {
+      return ApiUser.fromJson(decoded);
+    }
+  } catch (_) {
+    return null;
+  }
+
+  return null;
 }
