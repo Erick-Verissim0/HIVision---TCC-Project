@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Pool } from 'pg';
-import { UsersService } from '../users/users.service';
 import { CreateClinicLocationDto } from './dto/create-clinic-location.dto';
 import { UpdateClinicLocationDto } from './dto/update-clinic-location.dto';
 import { ClinicLocation } from './clinic-location.entity';
@@ -29,7 +28,7 @@ type PaginatedResponse<T> = {
 export class ClinicLocationsService implements OnModuleInit, OnModuleDestroy {
   private readonly pool: Pool;
 
-  constructor(private readonly doctorsService: UsersService) {
+  constructor() {
     this.pool = new Pool({
       host: process.env.DB_HOST ?? 'localhost',
       port: Number(process.env.DB_PORT ?? process.env.POSTGRES_PORT ?? 5433),
@@ -48,7 +47,7 @@ export class ClinicLocationsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async create(dto: CreateClinicLocationDto): Promise<ClinicLocation> {
-    if (!this.doctorsService.exists(dto.doctorId)) {
+    if (!(await this.doctorExists(dto.doctorId))) {
       throw new BadRequestException('Doctor not found');
     }
 
@@ -56,6 +55,7 @@ export class ClinicLocationsService implements OnModuleInit, OnModuleDestroy {
       `
         INSERT INTO clinic_locations (
           doctor_id,
+          name,
           zip_code,
           street,
           street_number,
@@ -65,11 +65,12 @@ export class ClinicLocationsService implements OnModuleInit, OnModuleDestroy {
           created_at,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
         RETURNING *
       `,
       [
         dto.doctorId,
+        dto.name ?? null,
         this.normalizeZipCode(dto.zipCode),
         dto.street,
         dto.streetNumber,
@@ -164,7 +165,7 @@ export class ClinicLocationsService implements OnModuleInit, OnModuleDestroy {
   async update(id: string, dto: UpdateClinicLocationDto): Promise<ClinicLocation> {
     await this.findOne(id);
 
-    if (dto.doctorId && !this.doctorsService.exists(dto.doctorId)) {
+    if (dto.doctorId && !(await this.doctorExists(dto.doctorId))) {
       throw new BadRequestException('Doctor not found');
     }
 
@@ -177,6 +178,7 @@ export class ClinicLocationsService implements OnModuleInit, OnModuleDestroy {
     };
 
     if (dto.doctorId !== undefined) setUpdate('doctor_id', dto.doctorId);
+    if (dto.name !== undefined) setUpdate('name', dto.name ?? null);
     if (dto.zipCode !== undefined) setUpdate('zip_code', this.normalizeZipCode(dto.zipCode));
     if (dto.street !== undefined) setUpdate('street', dto.street);
     if (dto.streetNumber !== undefined) setUpdate('street_number', dto.streetNumber);
@@ -215,10 +217,19 @@ export class ClinicLocationsService implements OnModuleInit, OnModuleDestroy {
     return zipCode.replace(/\D/g, '').slice(0, 8);
   }
 
+  private async doctorExists(doctorId: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ exists: boolean }>(
+      `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND type = 'doctor') AS exists`,
+      [doctorId],
+    );
+    return rows[0]?.exists ?? false;
+  }
+
   private mapRowToClinicLocation(row: ClinicLocationRow): ClinicLocation {
     return {
       id: row.id,
       doctorId: row.doctor_id,
+      name: row.name ?? undefined,
       zipCode: row.zip_code,
       street: row.street,
       streetNumber: row.street_number,
@@ -234,6 +245,7 @@ export class ClinicLocationsService implements OnModuleInit, OnModuleDestroy {
 type ClinicLocationRow = {
   id: string;
   doctor_id: string;
+  name: string | null;
   zip_code: string;
   street: string;
   street_number: string;

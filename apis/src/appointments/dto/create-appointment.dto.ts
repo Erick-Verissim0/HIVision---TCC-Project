@@ -2,7 +2,6 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDate,
-  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -11,7 +10,6 @@ import {
   Matches,
   Min,
 } from 'class-validator';
-import { ArtAdherence, Immunizations, MaritalStatus } from '../appointment.entity';
 
 export class CreateAppointmentDto {
   @IsUUID()
@@ -19,6 +17,9 @@ export class CreateAppointmentDto {
 
   @IsUUID()
   patientId: string;
+
+  @IsUUID()
+  clinicLocationId: string;
 
   @Type(() => Date)
   @IsDate()
@@ -34,8 +35,8 @@ export class CreateAppointmentDto {
   sexualOrientation?: string;
 
   @IsOptional()
-  @IsEnum(MaritalStatus)
-  maritalStatus?: MaritalStatus;
+  @IsString()
+  maritalStatus?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -83,8 +84,12 @@ export class CreateAppointmentDto {
   coinfectionScreening?: string;
 
   @IsOptional()
-  @IsEnum(Immunizations)
-  immunizations?: Immunizations;
+  @IsString()
+  immunizations?: string;
+
+  @IsOptional()
+  @IsString()
+  boneHealth?: string;
 
   @IsOptional()
   @IsString()
@@ -119,8 +124,8 @@ export class CreateAppointmentDto {
   currentArt?: string;
 
   @IsOptional()
-  @IsEnum(ArtAdherence)
-  adherence?: ArtAdherence;
+  @IsString()
+  adherence?: string;
 
   @IsOptional()
   @Type(() => Date)
