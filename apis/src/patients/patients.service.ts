@@ -37,6 +37,7 @@ type PatientRow = {
 type PatientListFilters = {
   name?: string;
   cpf?: string;
+  doctorId?: string;
   page?: number;
   limit?: number;
 };
@@ -169,6 +170,11 @@ export class PatientsService implements OnModuleInit, OnModuleDestroy {
         values.push(`%${normalizedCpf}%`);
         where.push(`cpf LIKE $${values.length}`);
       }
+    }
+
+    if (filters.doctorId?.trim()) {
+      values.push(filters.doctorId.trim());
+      where.push(`doctor_id = $${values.length}`);
     }
 
     const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';

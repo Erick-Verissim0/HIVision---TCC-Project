@@ -462,11 +462,16 @@ class ApiUser {
 class ApiClient {
   static const String _baseUrl = 'http://localhost:3001';
 
-  Future<List<ApiPatient>> fetchPatients() async {
-    final uri = Uri.parse('$_baseUrl/patients');
+  Future<List<ApiPatient>> fetchPatients({String? doctorId}) async {
+    final uri = Uri.parse('$_baseUrl/patients').replace(
+      queryParameters: {
+        if (doctorId != null && doctorId.trim().isNotEmpty)
+          'doctorId': doctorId.trim(),
+      },
+    );
     final response = await http.get(uri);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Erro ao carregar pacientes (${response.statusCode})');
+      throw Exception('Erro ao carregar pacientes ({response.statusCode})');
     }
     final decoded = jsonDecode(response.body);
     final list = _extractList(decoded);
@@ -591,11 +596,13 @@ class ApiClient {
     );
   }
 
-  Future<List<ApiAppointment>> fetchAppointments({String? patientId}) async {
+  Future<List<ApiAppointment>> fetchAppointments({String? patientId, String? doctorId}) async {
     final uri = Uri.parse('$_baseUrl/appointments').replace(
       queryParameters: {
         if (patientId != null && patientId.trim().isNotEmpty)
           'patientId': patientId.trim(),
+        if (doctorId != null && doctorId.trim().isNotEmpty)
+          'doctorId': doctorId.trim(),
       },
     );
     final response = await http.get(uri);
@@ -845,6 +852,30 @@ class ApiClient {
     throw Exception(
       message ?? 'Erro ao realizar login (${response.statusCode})',
     );
+  }
+
+  Future<ApiUser> fetchUserById(String userId) async {
+    final normalizedId = userId.trim();
+    if (normalizedId.isEmpty) {
+      throw Exception('ID do usuario invalido');
+    }
+
+    final uri = Uri.parse('$_baseUrl/users/$normalizedId');
+    final response = await http.get(uri);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final user = ApiUser.fromJson(decoded);
+        if (user.id.trim().isNotEmpty) {
+          return user;
+        }
+      }
+      throw Exception('Resposta inválida ao carregar usuário');
+    }
+
+    final message = _extractErrorMessage(response.body);
+    throw Exception(message ?? 'Erro ao carregar usuário (${response.statusCode})');
   }
 
   Future<ApiUser> register({
@@ -2369,13 +2400,13 @@ class _HivisionShellState extends State<HivisionShell> {
               onOpenMiddlePanel: () {
                 if (_section == _DesktopSection.home ||
                     _section == _DesktopSection.profile ||
-                    _section == _DesktopSection.reports)
+                    _section == _DesktopSection.reports) {
                   return;
+                }
                 setState(() => _isMiddlePanelOpen = true);
               },
               searchTerm: _desktopSearchTerm,
-              onSearchChanged: (value) =>
-                  setState(() => _desktopSearchTerm = value),
+              onSearchChanged: (value) => setState(() => _desktopSearchTerm = value),
               onSectionChanged: (s) => setState(() {
                 _section = s;
                 _desktopSearchTerm = '';
@@ -3166,7 +3197,7 @@ class _HomeSectionContentState extends State<_HomeSectionContent> {
                   Expanded(
                     child: _HomeActionCard(
                       icon: Icons.medical_services_outlined,
-                      label: 'Nova consulta',
+                      label: 'Nova\nconsulta',
                       onTap: widget.onGoToNewConsultation,
                     ),
                   ),
@@ -3174,7 +3205,7 @@ class _HomeSectionContentState extends State<_HomeSectionContent> {
                   Expanded(
                     child: _HomeActionCard(
                       icon: Icons.person_add_alt_1_outlined,
-                      label: 'Novo paciente',
+                      label: 'Novo\npaciente',
                       onTap: widget.onGoToNewPatient,
                     ),
                   ),
@@ -3478,17 +3509,17 @@ class _HomeActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 94),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        constraints: const BoxConstraints(minHeight: 88),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
         decoration: BoxDecoration(
-          color: AppColors.wine,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.wine),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFCFA3A3), width: 1.2),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x22000000),
+              color: Color(0x1A760000),
               blurRadius: 10,
               offset: Offset(0, 4),
             ),
@@ -3497,16 +3528,26 @@ class _HomeActionCard extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Colors.white, size: 24),
-            const SizedBox(height: 6),
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7DCDC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFD9B0B0)),
+              ),
+              child: Icon(icon, color: AppColors.textDark, size: 18),
+            ),
+            const SizedBox(height: 8),
             Text(
               label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+              textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 13,
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: AppColors.textDark,
+                fontWeight: FontWeight.w700,
+                height: 1.1,
               ),
             ),
           ],
@@ -3709,11 +3750,28 @@ class _ApiPatientsListDesktopState extends State<_ApiPatientsListDesktop> {
   }
 }
 
-void _openDocument(ApiPatient patient, ApiUser? currentUser, String documentType) {
+Future<void> _openDocument(
+  ApiPatient patient,
+  ApiUser? currentUser,
+  String documentType, {
+  bool prefillDate = true,
+}) async {
+  var resolvedUser = currentUser;
+  final currentCrm = (resolvedUser?.crm ?? '').trim();
+  final currentUserId = resolvedUser?.id.trim() ?? '';
+
+  if (currentCrm.isEmpty && currentUserId.isNotEmpty) {
+    try {
+      resolvedUser = await ApiClient().fetchUserById(currentUserId);
+    } catch (_) {}
+  }
+
   final now = DateTime.now();
-  final currentDate = '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
-  final doctorName = currentUser?.name ?? 'Médico Responsável';
-  final doctorCrm = currentUser?.crm ?? '';
+  final currentDate = prefillDate
+      ? '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}'
+      : '';
+  final doctorName = resolvedUser?.name ?? 'Médico Responsável';
+  final doctorCrm = (resolvedUser?.crm ?? '').trim();
   final birthDateStr = patient.birthDate != null ? _formatDate(patient.birthDate!) : '-';
 
   const sharedStyles = '''
@@ -6213,7 +6271,12 @@ class _ReportsSectionContent extends StatelessWidget {
                         label == 'Atestado Médico Geral' ? 'Atestado Médico' :
                         label;
                     return InkWell(
-                      onTap: () => _openDocument(blankPatient, currentUser, docKey),
+                      onTap: () => _openDocument(
+                        blankPatient,
+                        currentUser,
+                        docKey,
+                        prefillDate: false,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -8332,9 +8395,12 @@ class _NewConsultationDesktopFormContentState
     extends State<_NewConsultationDesktopFormContent> {
   final _apiClient = ApiClient();
   final _patientNameCtrl = TextEditingController();
+  final _patientCpfCtrl = TextEditingController();
   final _patientNameFocus = FocusNode();
+  final _patientCpfFocus = FocusNode();
   final _sexualOrientationCtrl = TextEditingController();
   final _ageCtrl = TextEditingController();
+  final _birthDateCtrl = TextEditingController();
   final _maritalStatusCtrl = TextEditingController();
   final _professionCtrl = TextEditingController();
   final _concordantPartnerCtrl = TextEditingController();
@@ -8364,36 +8430,49 @@ class _NewConsultationDesktopFormContentState
   ApiPatient? _selectedPatient;
   bool _showPatientSuggestions = false;
 
+  String _dateToText(DateTime? value) => value == null ? '' : _formatDate(value);
+
+  String _intToText(int? value) => value?.toString() ?? '';
+
+  void _applyPatientToForm(ApiPatient patient) {
+    _patientNameCtrl.text = patient.name;
+    _patientCpfCtrl.text = _formatCpf(patient.cpf);
+    _ageCtrl.text = _intToText(patient.age);
+    _birthDateCtrl.text = _dateToText(patient.birthDate);
+    _maritalStatusCtrl.text = patient.maritalStatus;
+    _professionCtrl.text = patient.profession;
+    _sexualOrientationCtrl.text = patient.sexualOrientation;
+    _concordantPartnerCtrl.text = patient.partnerSerologicalStatus;
+    _previousDiseasesCtrl.text = patient.previousDiseases;
+    _allergiesCtrl.text = patient.allergies;
+    _medicationsCtrl.text = patient.medications;
+    _comorbiditiesCtrl.text = patient.comorbidities;
+    _surgeriesCtrl.text = patient.surgeries;
+
+    _hivStartDateCtrl.text = _dateToText(patient.hivDiagnosisDate);
+    _cd4Ctrl.text = _intToText(patient.cd4Current ?? patient.cd4Initial);
+    _currentTarvCtrl.text = patient.currentARV;
+    _viralLoadCtrl.text = _intToText(patient.initialViralLoad);
+    _currentSchemeCtrl.text = patient.therapeuticHistory;
+    _virologicalStatusCtrl.text = patient.virologicalStatus;
+    _adherenceCtrl.text = patient.treatmentAdherence;
+
+    _cardioRiskCtrl.text = patient.cardiovascularRisk;
+    _neoplasiasCtrl.text = patient.neoplasmScreening;
+    _coinfectionsCtrl.text = patient.coinfectionScreening;
+    _immunizationsCtrl.text = patient.immunizations;
+    _boneHealthCtrl.text = patient.boneHealth;
+    _observationsCtrl.text = '';
+  }
+
   @override
   void initState() {
     super.initState();
     final patient = widget.initialPatient;
     if (patient != null) {
       _selectedPatient = patient;
-      _patientNameCtrl.text = patient.name;
-      if (patient.age != null) _ageCtrl.text = patient.age.toString();
-      if (patient.maritalStatus.trim().isNotEmpty) {
-        _maritalStatusCtrl.text = patient.maritalStatus;
-      }
-      if (patient.profession.trim().isNotEmpty) {
-        _professionCtrl.text = patient.profession;
-      }
-      if (patient.previousDiseases.trim().isNotEmpty) {
-        _previousDiseasesCtrl.text = patient.previousDiseases;
-      }
-      if (patient.allergies.trim().isNotEmpty) {
-        _allergiesCtrl.text = patient.allergies;
-      }
-      if (patient.medications.trim().isNotEmpty) {
-        _medicationsCtrl.text = patient.medications;
-      }
+      _applyPatientToForm(patient);
     }
-    _patientNameFocus.addListener(() {
-      if (!mounted) return;
-      setState(() {
-        _showPatientSuggestions = _patientNameFocus.hasFocus;
-      });
-    });
     _loadDoctorPatients();
     _loadDoctorClinicLocations();
   }
@@ -8446,24 +8525,36 @@ class _NewConsultationDesktopFormContentState
   }
 
   List<ApiPatient> _filteredPatientSuggestions() {
-    final query = _patientNameCtrl.text.trim().toLowerCase();
+    final nameQuery = _patientNameCtrl.text.trim().toLowerCase();
+    if (nameQuery.isEmpty) return const [];
     final filtered = _doctorPatients.where((p) {
-      if (query.isEmpty) return true;
-      return p.name.toLowerCase().contains(query);
+      return p.name.toLowerCase().contains(nameQuery);
     }).toList();
     return filtered.take(8).toList();
+  }
+
+  String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
+
+  String _formatCpf(String value) {
+    final digits = _digitsOnly(value);
+    if (digits.isEmpty) return '';
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return '${digits.substring(0, 3)}.${digits.substring(3)}';
+    if (digits.length <= 9) return '${digits.substring(0, 3)}.${digits.substring(3, 6)}.${digits.substring(6)}';
+    return '${digits.substring(0, 3)}.${digits.substring(3, 6)}.${digits.substring(6, 9)}-${digits.substring(9)}';
   }
 
   void _selectPatientSuggestion(ApiPatient patient) {
     setState(() {
       _selectedPatient = patient;
-      _patientNameCtrl.text = patient.name;
+      _applyPatientToForm(patient);
       _patientNameCtrl.selection = TextSelection.collapsed(
         offset: _patientNameCtrl.text.length,
       );
       _showPatientSuggestions = false;
     });
     _patientNameFocus.unfocus();
+    _patientCpfFocus.unfocus();
   }
 
   DateTime? _parseOptionalDate(String value) {
@@ -8506,9 +8597,12 @@ class _NewConsultationDesktopFormContentState
   @override
   void dispose() {
     _patientNameCtrl.dispose();
+    _patientCpfCtrl.dispose();
     _patientNameFocus.dispose();
+    _patientCpfFocus.dispose();
     _sexualOrientationCtrl.dispose();
     _ageCtrl.dispose();
+    _birthDateCtrl.dispose();
     _maritalStatusCtrl.dispose();
     _professionCtrl.dispose();
     _concordantPartnerCtrl.dispose();
@@ -8541,6 +8635,13 @@ class _NewConsultationDesktopFormContentState
       return;
     }
 
+    if (_digitsOnly(_patientCpfCtrl.text).isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe o CPF do paciente.')),
+      );
+      return;
+    }
+
     final doctorId = widget.currentUser?.id ?? '';
     if (doctorId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -8549,15 +8650,12 @@ class _NewConsultationDesktopFormContentState
       return;
     }
 
-    ApiPatient? patient = widget.initialPatient;
-    if (_selectedPatient != null) {
-      patient = _selectedPatient;
-    }
-    if (patient == null) {
-      final normalizedName = _patientNameCtrl.text.trim().toLowerCase();
+    final normalizedCpf = _digitsOnly(_patientCpfCtrl.text);
+    ApiPatient? patient = _selectedPatient;
+    if (patient == null || _digitsOnly(patient.cpf) != normalizedCpf) {
       for (final candidate in _doctorPatients) {
         if (candidate.doctorId == doctorId &&
-            candidate.name.trim().toLowerCase() == normalizedName) {
+            _digitsOnly(candidate.cpf) == normalizedCpf) {
           patient = candidate;
           break;
         }
@@ -8568,7 +8666,7 @@ class _NewConsultationDesktopFormContentState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Paciente não encontrado. Abra Nova consulta a partir do perfil do paciente.',
+            'Paciente não encontrado para o CPF informado.',
           ),
         ),
       );
@@ -8709,7 +8807,7 @@ class _NewConsultationDesktopFormContentState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _ConsultationHighlightedSectionTitle('Nova Consulta'),
+        const _ConsultationHighlightedSectionTitle('Dados gerais'),
         const SizedBox(height: 8),
         _ConsultationInputField(
           label: 'Nome completo',
@@ -8722,7 +8820,25 @@ class _NewConsultationDesktopFormContentState
                   _patientNameCtrl.text.trim().toLowerCase()) {
                 _selectedPatient = null;
               }
-              _showPatientSuggestions = _patientNameFocus.hasFocus;
+              _showPatientSuggestions = _patientNameCtrl.text.trim().isNotEmpty;
+            });
+          },
+        ),
+        _ConsultationInputField(
+          label: 'CPF',
+          controller: _patientCpfCtrl,
+          requiredField: true,
+          focusNode: _patientCpfFocus,
+          keyboardType: TextInputType.number,
+          inputFormatters: [CpfInputFormatter()],
+          onChanged: (_) {
+            setState(() {
+              if (_selectedPatient != null &&
+                  _digitsOnly(_selectedPatient!.cpf) !=
+                      _digitsOnly(_patientCpfCtrl.text)) {
+                _selectedPatient = null;
+              }
+              _showPatientSuggestions = _patientNameCtrl.text.trim().isNotEmpty;
             });
           },
         ),
@@ -8744,6 +8860,12 @@ class _NewConsultationDesktopFormContentState
           controller: _ageCtrl,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        _ConsultationInputField(
+          label: 'Data de nascimento',
+          controller: _birthDateCtrl,
+          keyboardType: TextInputType.number,
+          inputFormatters: [DateInputFormatter()],
         ),
         _ConsultationInputField(label: 'Ocupação', controller: _professionCtrl),
         _ConsultationInputField(
@@ -9146,16 +9268,24 @@ class _PatientSuggestionsDropdown extends StatelessWidget {
         separatorBuilder: (_, __) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final patient = patients[index];
-          return InkWell(
-            onTap: () => onSelected(patient),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Text(
-                patient.name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textDark,
-                  fontWeight: FontWeight.w500,
+          return Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: () {
+                onSelected(patient);
+              },
+              hoverColor: const Color(0xFFF5E8E8),
+              highlightColor: const Color(0xFFE8D4D4),
+              splashColor: const Color(0xFFE8D4D4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Text(
+                  patient.name,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: AppColors.textDark,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ),

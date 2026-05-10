@@ -13,6 +13,7 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
 type AppointmentListFilters = {
   doctorName?: string;
+  doctorId?: string;
   patientName?: string;
   patientId?: string;
   page?: number;
@@ -209,6 +210,11 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
       where.push(
         `EXISTS (SELECT 1 FROM users u WHERE u.id = appointments.doctor_id AND LOWER(u.name) LIKE $${values.length})`,
       );
+    }
+
+    if (filters.doctorId?.trim()) {
+      values.push(filters.doctorId.trim());
+      where.push(`appointments.doctor_id = $${values.length}`);
     }
 
     if (filters.patientName?.trim()) {

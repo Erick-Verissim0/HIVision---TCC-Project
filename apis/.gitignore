@@ -110,5 +110,7 @@ TEST*.xml
 target/
 dist/
 
+# Seeds
+postgres/seed/
 
 

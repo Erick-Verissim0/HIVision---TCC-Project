@@ -398,12 +398,11 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
     this.users = this.users.filter((user) => user.id !== id);
   }
 
-  async login(
-    dto: LoginUserDto,
-  ): Promise<{
+  async login(dto: LoginUserDto): Promise<{
     id: string;
     name: string;
     email: string;
+    crm?: string;
     image?: string;
     type: 'doctor' | 'admin';
   }> {
@@ -427,17 +426,17 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       id: user.id,
       name: user.name,
       email: user.email,
+      crm: user.crm,
       image: user.image,
       type: user.type,
     };
   }
 
-  async forgotPassword(
-    dto: ForgotPasswordDto,
-  ): Promise<{
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{
     id: string;
     name: string;
     email: string;
+    crm?: string;
     image?: string;
     type: 'doctor' | 'admin';
   }> {
@@ -470,6 +469,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       id: updatedUser.id,
       name: updatedUser.name,
       email: updatedUser.email,
+      crm: updatedUser.crm,
       image: updatedUser.image,
       type: updatedUser.type,
     };
