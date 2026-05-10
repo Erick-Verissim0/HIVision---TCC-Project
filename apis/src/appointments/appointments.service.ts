@@ -6,7 +6,6 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Pool } from 'pg';
-import { UsersService } from '../users/users.service';
 import { PatientsService } from '../patients/patients.service';
 import { Appointment } from './appointment.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -14,7 +13,9 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
 type AppointmentListFilters = {
   doctorName?: string;
+  doctorId?: string;
   patientName?: string;
+  patientId?: string;
   page?: number;
   limit?: number;
 };
@@ -35,10 +36,7 @@ type PaginatedResponse<T> = {
 export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
   private readonly pool: Pool;
 
-  constructor(
-    private readonly doctorsService: UsersService,
-    private readonly patientsService: PatientsService,
-  ) {
+  constructor(private readonly patientsService: PatientsService) {
     this.pool = new Pool({
       host: process.env.DB_HOST ?? 'localhost',
       port: Number(process.env.DB_PORT ?? process.env.POSTGRES_PORT ?? 5433),
@@ -49,6 +47,55 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit(): Promise<void> {
+    await this.pool.query(`
+      ALTER TABLE appointments
+      ADD COLUMN IF NOT EXISTS bone_health TEXT,
+      ADD COLUMN IF NOT EXISTS clinic_location_id UUID REFERENCES clinic_locations(id)
+    `);
+    await this.pool.query(`
+      INSERT INTO clinic_locations (
+        doctor_id,
+        name,
+        zip_code,
+        street,
+        street_number,
+        neighborhood,
+        city,
+        address_complement,
+        created_at,
+        updated_at
+      )
+      SELECT DISTINCT
+        a.doctor_id,
+        'Local padrão',
+        '00000000',
+        'Endereço não informado',
+        'S/N',
+        NULL,
+        COALESCE(NULLIF(a.city, ''), 'Não informado'),
+        NULL,
+        NOW(),
+        NOW()
+      FROM appointments a
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM clinic_locations cl
+        WHERE cl.doctor_id = a.doctor_id
+      )
+    `);
+    await this.pool.query(`
+      UPDATE appointments a
+      SET clinic_location_id = loc.id
+      FROM (
+        SELECT DISTINCT ON (cl.doctor_id)
+          cl.doctor_id,
+          cl.id
+        FROM clinic_locations cl
+        ORDER BY cl.doctor_id, cl.created_at ASC
+      ) AS loc
+      WHERE a.doctor_id = loc.doctor_id
+        AND a.clinic_location_id IS NULL
+    `);
     await this.pool.query('SELECT 1');
   }
 
@@ -57,13 +104,14 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async create(dto: CreateAppointmentDto): Promise<Appointment> {
-    await this.validateReferences(dto.doctorId, dto.patientId);
+    await this.validateReferences(dto.doctorId, dto.patientId, dto.clinicLocationId);
 
     const { rows } = await this.pool.query<AppointmentRow>(
       `
         INSERT INTO appointments (
           doctor_id,
           patient_id,
+          clinic_location_id,
           appointment_date,
           age,
           sexual_orientation,
@@ -80,6 +128,7 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
           neoplasm_screening,
           coinfection_screening,
           immunizations,
+          bone_health,
           notes,
           zip_code,
           street,
@@ -103,13 +152,14 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
           $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
           $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-          $31, $32, $33, $34, NOW(), NOW()
+          $31, $32, $33, $34, $35, $36, NOW(), NOW()
         )
         RETURNING *
       `,
       [
         dto.doctorId,
         dto.patientId,
+        dto.clinicLocationId,
         dto.appointmentDate,
         dto.age ?? null,
         dto.sexualOrientation ?? null,
@@ -126,6 +176,7 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
         dto.neoplasmScreening ?? null,
         dto.coinfectionScreening ?? null,
         dto.immunizations ?? null,
+        dto.boneHealth ?? null,
         dto.notes ?? null,
         dto.zipCode ?? null,
         dto.street ?? null,
@@ -161,11 +212,21 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    if (filters.doctorId?.trim()) {
+      values.push(filters.doctorId.trim());
+      where.push(`appointments.doctor_id = $${values.length}`);
+    }
+
     if (filters.patientName?.trim()) {
       values.push(`%${filters.patientName.trim().toLowerCase()}%`);
       where.push(
         `EXISTS (SELECT 1 FROM patients p WHERE p.id = appointments.patient_id AND LOWER(p.name) LIKE $${values.length})`,
       );
+    }
+
+    if (filters.patientId?.trim()) {
+      values.push(filters.patientId.trim());
+      where.push(`appointments.patient_id = $${values.length}`);
     }
 
     const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -235,10 +296,11 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
   async update(id: string, dto: UpdateAppointmentDto): Promise<Appointment> {
     const appointment = await this.findOne(id);
 
-    if (dto.doctorId || dto.patientId) {
+    if (dto.doctorId || dto.patientId || dto.clinicLocationId) {
       const doctorId = dto.doctorId ?? appointment.doctorId;
       const patientId = dto.patientId ?? appointment.patientId;
-      await this.validateReferences(doctorId, patientId);
+      const clinicLocationId = dto.clinicLocationId ?? appointment.clinicLocationId;
+      await this.validateReferences(doctorId, patientId, clinicLocationId);
     }
 
     const updates: string[] = [];
@@ -251,6 +313,7 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
 
     if (dto.doctorId !== undefined) setUpdate('doctor_id', dto.doctorId);
     if (dto.patientId !== undefined) setUpdate('patient_id', dto.patientId);
+    if (dto.clinicLocationId !== undefined) setUpdate('clinic_location_id', dto.clinicLocationId);
     if (dto.appointmentDate !== undefined) setUpdate('appointment_date', dto.appointmentDate);
     if (dto.age !== undefined) setUpdate('age', dto.age);
     if (dto.sexualOrientation !== undefined) setUpdate('sexual_orientation', dto.sexualOrientation);
@@ -269,6 +332,7 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
     if (dto.coinfectionScreening !== undefined)
       setUpdate('coinfection_screening', dto.coinfectionScreening);
     if (dto.immunizations !== undefined) setUpdate('immunizations', dto.immunizations);
+    if (dto.boneHealth !== undefined) setUpdate('bone_health', dto.boneHealth);
     if (dto.notes !== undefined) setUpdate('notes', dto.notes);
     if (dto.zipCode !== undefined) setUpdate('zip_code', dto.zipCode);
     if (dto.street !== undefined) setUpdate('street', dto.street);
@@ -311,13 +375,37 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async validateReferences(doctorId: string, patientId: string): Promise<void> {
-    if (!this.doctorsService.exists(doctorId)) {
+  private async validateReferences(
+    doctorId: string,
+    patientId: string,
+    clinicLocationId: string,
+  ): Promise<void> {
+    const doctorResult = await this.pool.query<{ exists: boolean }>(
+      `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND type = 'doctor') AS exists`,
+      [doctorId],
+    );
+
+    if (!(doctorResult.rows[0]?.exists ?? false)) {
       throw new BadRequestException('Doctor not found');
     }
 
     if (!(await this.patientsService.exists(patientId))) {
       throw new BadRequestException('Patient not found');
+    }
+
+    const clinicLocationResult = await this.pool.query<{ exists: boolean }>(
+      `
+        SELECT EXISTS(
+          SELECT 1
+          FROM clinic_locations
+          WHERE id = $1 AND doctor_id = $2
+        ) AS exists
+      `,
+      [clinicLocationId, doctorId],
+    );
+
+    if (!(clinicLocationResult.rows[0]?.exists ?? false)) {
+      throw new BadRequestException('Clinic location not found for this doctor');
     }
   }
 
@@ -326,6 +414,7 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
       id: row.id,
       doctorId: row.doctor_id,
       patientId: row.patient_id,
+      clinicLocationId: row.clinic_location_id,
       appointmentDate: row.appointment_date,
       age: row.age ?? undefined,
       sexualOrientation: row.sexual_orientation ?? undefined,
@@ -342,6 +431,7 @@ export class AppointmentsService implements OnModuleInit, OnModuleDestroy {
       neoplasmScreening: row.neoplasm_screening ?? undefined,
       coinfectionScreening: row.coinfection_screening ?? undefined,
       immunizations: row.immunizations ?? undefined,
+      boneHealth: row.bone_health ?? undefined,
       notes: row.notes ?? undefined,
       zipCode: row.zip_code ?? undefined,
       street: row.street ?? undefined,
@@ -368,6 +458,7 @@ type AppointmentRow = {
   id: string;
   doctor_id: string;
   patient_id: string;
+  clinic_location_id: string;
   appointment_date: Date;
   age: number | null;
   sexual_orientation: string | null;
@@ -384,6 +475,7 @@ type AppointmentRow = {
   neoplasm_screening: string | null;
   coinfection_screening: string | null;
   immunizations: Appointment['immunizations'] | null;
+  bone_health: Appointment['boneHealth'] | null;
   notes: string | null;
   zip_code: string | null;
   street: string | null;

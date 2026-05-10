@@ -16,6 +16,20 @@ type PatientRow = {
   name: string;
   cpf: string;
   last_appointment: Date | null;
+  zip_code: string | null;
+  street: string | null;
+  street_number: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  address_complement: string | null;
+  age: number | null;
+  birth_date: Date | null;
+  marital_status: string | null;
+  profession: string | null;
+  previous_diseases: string | null;
+  allergies: string | null;
+  medications: string | null;
+  bone_health: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -23,6 +37,7 @@ type PatientRow = {
 type PatientListFilters = {
   name?: string;
   cpf?: string;
+  doctorId?: string;
   page?: number;
   limit?: number;
 };
@@ -54,6 +69,23 @@ export class PatientsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit(): Promise<void> {
+    await this.pool.query(`
+      ALTER TABLE patients
+      ADD COLUMN IF NOT EXISTS zip_code VARCHAR(8),
+      ADD COLUMN IF NOT EXISTS street TEXT,
+      ADD COLUMN IF NOT EXISTS street_number TEXT,
+      ADD COLUMN IF NOT EXISTS neighborhood TEXT,
+      ADD COLUMN IF NOT EXISTS city TEXT,
+      ADD COLUMN IF NOT EXISTS address_complement TEXT,
+      ADD COLUMN IF NOT EXISTS age INT,
+      ADD COLUMN IF NOT EXISTS birth_date TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS marital_status TEXT,
+      ADD COLUMN IF NOT EXISTS profession TEXT,
+      ADD COLUMN IF NOT EXISTS previous_diseases TEXT,
+      ADD COLUMN IF NOT EXISTS allergies TEXT,
+      ADD COLUMN IF NOT EXISTS medications TEXT,
+      ADD COLUMN IF NOT EXISTS bone_health TEXT
+    `);
     await this.pool.query('SELECT 1');
   }
 
@@ -66,11 +98,51 @@ export class PatientsService implements OnModuleInit, OnModuleDestroy {
     try {
       const { rows } = await this.pool.query<PatientRow>(
         `
-          INSERT INTO patients (doctor_id, name, cpf, last_appointment, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, NOW(), NOW())
+          INSERT INTO patients (
+            doctor_id,
+            name,
+            cpf,
+            last_appointment,
+            zip_code,
+            street,
+            street_number,
+            neighborhood,
+            city,
+            address_complement,
+            age,
+            birth_date,
+            marital_status,
+            profession,
+            previous_diseases,
+            allergies,
+            medications,
+            bone_health,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
           RETURNING *
         `,
-        [dto.doctorId, dto.name, cpf, dto.lastAppointment ?? null],
+        [
+          dto.doctorId,
+          dto.name,
+          cpf,
+          dto.lastAppointment ?? null,
+          dto.zipCode?.trim() || null,
+          dto.street?.trim() || null,
+          dto.streetNumber?.trim() || null,
+          dto.neighborhood?.trim() || null,
+          dto.city?.trim() || null,
+          dto.addressComplement?.trim() || null,
+          dto.age ?? null,
+          dto.birthDate ?? null,
+          dto.maritalStatus?.trim() || null,
+          dto.profession?.trim() || null,
+          dto.previousDiseases?.trim() || null,
+          dto.allergies?.trim() || null,
+          dto.medications?.trim() || null,
+          dto.boneHealth?.trim() || null,
+        ],
       );
       return this.mapRowToPatient(rows[0]);
     } catch (error: any) {
@@ -98,6 +170,11 @@ export class PatientsService implements OnModuleInit, OnModuleDestroy {
         values.push(`%${normalizedCpf}%`);
         where.push(`cpf LIKE $${values.length}`);
       }
+    }
+
+    if (filters.doctorId?.trim()) {
+      values.push(filters.doctorId.trim());
+      where.push(`doctor_id = $${values.length}`);
     }
 
     const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -179,6 +256,62 @@ export class PatientsService implements OnModuleInit, OnModuleDestroy {
       values.push(dto.lastAppointment ?? null);
       updates.push(`last_appointment = $${values.length}`);
     }
+    if (dto.zipCode !== undefined) {
+      values.push(dto.zipCode?.trim() || null);
+      updates.push(`zip_code = $${values.length}`);
+    }
+    if (dto.street !== undefined) {
+      values.push(dto.street?.trim() || null);
+      updates.push(`street = $${values.length}`);
+    }
+    if (dto.streetNumber !== undefined) {
+      values.push(dto.streetNumber?.trim() || null);
+      updates.push(`street_number = $${values.length}`);
+    }
+    if (dto.neighborhood !== undefined) {
+      values.push(dto.neighborhood?.trim() || null);
+      updates.push(`neighborhood = $${values.length}`);
+    }
+    if (dto.city !== undefined) {
+      values.push(dto.city?.trim() || null);
+      updates.push(`city = $${values.length}`);
+    }
+    if (dto.addressComplement !== undefined) {
+      values.push(dto.addressComplement?.trim() || null);
+      updates.push(`address_complement = $${values.length}`);
+    }
+    if (dto.age !== undefined) {
+      values.push(dto.age ?? null);
+      updates.push(`age = $${values.length}`);
+    }
+    if (dto.birthDate !== undefined) {
+      values.push(dto.birthDate ?? null);
+      updates.push(`birth_date = $${values.length}`);
+    }
+    if (dto.maritalStatus !== undefined) {
+      values.push(dto.maritalStatus?.trim() || null);
+      updates.push(`marital_status = $${values.length}`);
+    }
+    if (dto.profession !== undefined) {
+      values.push(dto.profession?.trim() || null);
+      updates.push(`profession = $${values.length}`);
+    }
+    if (dto.previousDiseases !== undefined) {
+      values.push(dto.previousDiseases?.trim() || null);
+      updates.push(`previous_diseases = $${values.length}`);
+    }
+    if (dto.allergies !== undefined) {
+      values.push(dto.allergies?.trim() || null);
+      updates.push(`allergies = $${values.length}`);
+    }
+    if (dto.medications !== undefined) {
+      values.push(dto.medications?.trim() || null);
+      updates.push(`medications = $${values.length}`);
+    }
+    if (dto.boneHealth !== undefined) {
+      values.push(dto.boneHealth?.trim() || null);
+      updates.push(`bone_health = $${values.length}`);
+    }
 
     if (!updates.length) return this.findOne(id);
 
@@ -226,6 +359,20 @@ export class PatientsService implements OnModuleInit, OnModuleDestroy {
       name: row.name,
       cpf: row.cpf,
       lastAppointment: row.last_appointment ?? undefined,
+      zipCode: row.zip_code ?? undefined,
+      street: row.street ?? undefined,
+      streetNumber: row.street_number ?? undefined,
+      neighborhood: row.neighborhood ?? undefined,
+      city: row.city ?? undefined,
+      addressComplement: row.address_complement ?? undefined,
+      age: row.age ?? undefined,
+      birthDate: row.birth_date ?? undefined,
+      maritalStatus: row.marital_status ?? undefined,
+      profession: row.profession ?? undefined,
+      previousDiseases: row.previous_diseases ?? undefined,
+      allergies: row.allergies ?? undefined,
+      medications: row.medications ?? undefined,
+      boneHealth: row.bone_health ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

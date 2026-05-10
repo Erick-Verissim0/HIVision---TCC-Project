@@ -1,2 +1,53 @@
-.DS_Store
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+out/
+node_modules/
+.dart_tool/
+.pub/
+.pub-cache/
+build/
+dist/
+out/
+coverage/
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*.log
+*.class
+*.pyc
+*.DS_Store
+Thumbs.db
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+Pods/
+Podfile.lock
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/
+
+# Web
+*.map
+*.js.map
+
+# Ambiente
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Outros
+*.tmp
+*.temp
+.cache/
+*.pid
+*.seed
+*.pid.lock
+
+# Pasta específica
 hivision_design/
+hivision_relatorios/

@@ -6,4 +6,18 @@ export interface Patient {
   createdAt: Date;
   updatedAt: Date;
   lastAppointment?: Date;
+  zipCode?: string;
+  street?: string;
+  streetNumber?: string;
+  neighborhood?: string;
+  city?: string;
+  addressComplement?: string;
+  age?: number;
+  birthDate?: Date;
+  maritalStatus?: string;
+  profession?: string;
+  previousDiseases?: string;
+  allergies?: string;
+  medications?: string;
+  boneHealth?: string;
 }

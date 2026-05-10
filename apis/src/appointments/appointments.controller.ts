@@ -15,13 +15,17 @@ export class AppointmentsController {
   @Get()
   findAll(
     @Query('doctorName') doctorName?: string,
+    @Query('doctorId') doctorId?: string,
     @Query('patientName') patientName?: string,
+    @Query('patientId') patientId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.appointmentsService.findAll({
       doctorName,
+      doctorId,
       patientName,
+      patientId,
       page: page !== undefined ? Number(page) : undefined,
       limit: limit !== undefined ? Number(limit) : undefined,
     });

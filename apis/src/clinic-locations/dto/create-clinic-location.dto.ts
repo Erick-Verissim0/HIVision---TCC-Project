@@ -4,6 +4,10 @@ export class CreateClinicLocationDto {
   @IsUUID()
   doctorId: string;
 
+  @IsOptional()
+  @IsString()
+  name?: string;
+
   @Matches(/^\d{8}$/)
   zipCode: string;
 

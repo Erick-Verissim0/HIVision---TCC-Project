@@ -16,12 +16,14 @@ export class PatientsController {
   findAll(
     @Query('name') name?: string,
     @Query('cpf') cpf?: string,
+    @Query('doctorId') doctorId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.patientsService.findAll({
       name,
       cpf,
+      doctorId,
       page: page !== undefined ? Number(page) : undefined,
       limit: limit !== undefined ? Number(limit) : undefined,
     });

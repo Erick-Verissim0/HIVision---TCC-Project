@@ -1,33 +1,13 @@
-export enum MaritalStatus {
-  SINGLE = 'SINGLE',
-  MARRIED = 'MARRIED',
-  DIVORCED = 'DIVORCED',
-  WIDOWED = 'WIDOWED',
-  STABLE_UNION = 'STABLE_UNION',
-  OTHER = 'OTHER',
-}
-
-export enum Immunizations {
-  COMPLETE = 'COMPLETE',
-  INCOMPLETE = 'INCOMPLETE',
-  NOT_INFORMED = 'NOT_INFORMED',
-}
-
-export enum ArtAdherence {
-  HIGH = 'HIGH',
-  MEDIUM = 'MEDIUM',
-  LOW = 'LOW',
-  NOT_INFORMED = 'NOT_INFORMED',
-}
-
 export interface Appointment {
   id: string;
   doctorId: string;
   patientId: string;
+  clinicLocationId: string;
+  clinicLocationName?: string;
   appointmentDate: Date;
   age?: number;
   sexualOrientation?: string;
-  maritalStatus?: MaritalStatus;
+  maritalStatus?: string;
   concordantPartner?: boolean;
   occupation?: string;
   comorbidities?: string;
@@ -39,7 +19,8 @@ export interface Appointment {
   cardiovascularRisk?: string;
   neoplasmScreening?: string;
   coinfectionScreening?: string;
-  immunizations?: Immunizations;
+  immunizations?: string;
+  boneHealth?: string;
   notes?: string;
   zipCode?: string;
   street?: string;
@@ -48,7 +29,7 @@ export interface Appointment {
   city?: string;
   addressComplement?: string;
   currentArt?: string;
-  adherence?: ArtAdherence;
+  adherence?: string;
   lastViralLoad?: Date;
   cd4Nadir?: string;
   virologicalStatus?: string;
