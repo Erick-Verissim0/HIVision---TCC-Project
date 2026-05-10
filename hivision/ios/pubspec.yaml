@@ -13,6 +13,7 @@ dependencies:
   http: ^1.2.2
   shared_preferences: ^2.3.2
   path_provider: ^2.1.5
+  image_picker: ^1.1.2
   printing: ^5.13.4
   pdf: ^3.11.1
   file_saver: ^0.3.1

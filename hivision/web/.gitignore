@@ -69,19 +69,19 @@ build/web/
 web/assets/
 
 # Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Coverage
-coverage/
-
-# Atom
-.atom/
-
-# Build
-.build/
+node_modules/
+build/
+.dart_tool/
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*.log
+*.class
+*.pyc
+*.DS_Store
+Thumbs.db
 
 # Build log
 .buildlog/

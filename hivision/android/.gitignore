@@ -80,20 +80,20 @@ coverage/
 # Atom
 .atom/
 
-# Build
-.build/
-
-# Build log
-.buildlog/
-
-# History
-.history
-
-# SVN
-.svn/
-
-# Swift Package Manager
-.swiftpm/
+build/
+.dart_tool/
+.pub/
+.pub-cache/
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*.log
+*.class
+*.pyc
+*.DS_Store
+Thumbs.db
 
 # Migration working directory
 migrate_working_dir/

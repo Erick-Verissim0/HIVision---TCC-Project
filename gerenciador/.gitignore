@@ -69,19 +69,19 @@ lib/generated_plugin_registrant.dart
 app.*.symbols
 
 # Obfuscation related
-app.*.map.json
-
-# Coverage
-coverage/
-
-# Atom
-.atom/
-
-# Build
-.build/
-
-# Build log
-.buildlog/
+node_modules/
+build/
+.dart_tool/
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*.log
+*.class
+*.pyc
+*.DS_Store
+Thumbs.db
 
 # History
 .history

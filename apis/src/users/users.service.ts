@@ -256,9 +256,20 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       updates.push(`image = $${values.length}`);
     }
 
-    if (dto.password !== undefined) {
-      values.push(await bcrypt.hash(dto.password, 10));
+    if (dto.currentPassword !== undefined || dto.newPassword !== undefined) {
+      if (!dto.currentPassword?.trim() || !dto.newPassword?.trim()) {
+        throw new BadRequestException('Senha atual e nova senha são obrigatórias');
+      }
+
+      const isValidPassword = await bcrypt.compare(dto.currentPassword, doctor.passwordHash);
+      if (!isValidPassword) {
+        throw new UnauthorizedException('Senha atual inválida');
+      }
+
+      values.push(await bcrypt.hash(dto.newPassword, 10));
       updates.push(`password_hash = $${values.length}`);
+    } else if (dto.password !== undefined) {
+      throw new BadRequestException('Senha atual e nova senha são obrigatórias');
     }
 
     if (!updates.length) {

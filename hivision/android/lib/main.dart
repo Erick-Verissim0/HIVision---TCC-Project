@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -150,11 +151,12 @@ class ApiClinicLocation {
 }
 
 class ApiUser {
-  ApiUser({required this.id, required this.name, required this.email, this.crm, this.type, this.profilePhotoUrl});
+  ApiUser({required this.id, required this.name, required this.email, this.cpf, this.crm, this.type, this.profilePhotoUrl});
 
   final String id;
   final String name;
   final String email;
+  final String? cpf;
   final String? crm;
   final String? type;
   final String? profilePhotoUrl;
@@ -178,10 +180,12 @@ class ApiUser {
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Profissional',
       email: json['email']?.toString() ?? '',
+      cpf: json['cpf']?.toString(),
       crm: json['crm']?.toString(),
       type: json['type']?.toString(),
       profilePhotoUrl: firstNonEmpty([
         json['profilePhotoUrl'],
+        json['image'],
         json['photoUrl'],
         json['avatarUrl'],
         json['photo'],
@@ -195,6 +199,7 @@ class ApiUser {
       'id': id,
       'name': name,
       'email': email,
+      'cpf': cpf,
       'crm': crm,
       'type': type,
       'profilePhotoUrl': profilePhotoUrl,
@@ -412,6 +417,61 @@ class ApiClient {
       }
     }
     throw Exception('Resposta invalida ao carregar usuario');
+  }
+
+  Future<ApiUser> updateDoctorProfile({
+    required String userId,
+    required String name,
+    required String email,
+    required String cpf,
+    required String crm,
+    String? image,
+    String? currentPassword,
+    String? newPassword,
+  }) async {
+    final normalizedId = userId.trim();
+    if (normalizedId.isEmpty) {
+      throw Exception('ID do usuario invalido');
+    }
+
+    final payload = <String, dynamic>{
+      'name': name.trim(),
+      'email': email.trim().toLowerCase(),
+      'cpf': cpf.trim(),
+      'crm': crm.trim(),
+    };
+
+    if (image != null && image.trim().isNotEmpty) {
+      payload['image'] = image.trim();
+    }
+
+    if (currentPassword != null && currentPassword.trim().isNotEmpty) {
+      payload['currentPassword'] = currentPassword.trim();
+    }
+
+    if (newPassword != null && newPassword.trim().isNotEmpty) {
+      payload['newPassword'] = newPassword.trim();
+    }
+
+    final response = await _requestWithFallback((baseUrl) {
+      final uri = Uri.parse('$baseUrl/users/doctor/$normalizedId');
+      return http.patch(
+        uri,
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+    });
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        return ApiUser.fromJson(decoded);
+      }
+      throw Exception('Resposta inválida ao atualizar perfil');
+    }
+
+    final message = _extractErrorMessage(response.body);
+    throw Exception(message ?? 'Erro ao atualizar perfil (${response.statusCode})');
   }
 
   Future<void> requestForgotPasswordLink({required String email}) async {
@@ -664,6 +724,18 @@ class _EntryScreenState extends State<EntryScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 26),
               child: Column(
                 children: [
+                  Text
+                  (
+                    'Este software foi desenvolvido em parceria com o Centro de Inovação Tecnológica do Cesmac e trata-se de um produto de dissertação do Programa de Pós-graduação Profissional em Biotecnologia em Saúde Humana e Animal da Universidade Estadual do Ceará em associação com o Centro Universitário Cesmac.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textDark,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -694,17 +766,6 @@ class _EntryScreenState extends State<EntryScreen> {
                             ),
                         ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Este software foi desenvolvido em parceria com o Centro de Inovação Tecnológica do Cesmac e trata-se de um produto de dissertação do Programa de Pós-graduação Profissional em Biotecnologia em Saúde Humana e Animal da Universidade Estadual do Ceará em associação com o Centro Universitário Cesmac.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.textDark,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
                     ),
                   ),
                 ],
@@ -1956,6 +2017,15 @@ class _HivisionShellState extends State<HivisionShell> {
     });
   }
 
+  Future<void> _updateCurrentUser(ApiUser updatedUser) async {
+    setState(() {
+      _effectiveCurrentUser = updatedUser;
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    await _persistLoggedUser(prefs, updatedUser);
+  }
+
   void _navigateToSection(_MobileSection section) {
     setState(() {
       if (_section != section) {
@@ -2133,7 +2203,11 @@ class _HivisionShellState extends State<HivisionShell> {
           onBack: _goBackSection,
         );
       case _MobileSection.profile:
-        return SettingsScreen(onBack: _goBackSection);
+        return DoctorProfileScreen(
+          currentUser: _effectiveCurrentUser,
+          onBack: _goBackSection,
+          onSaved: _updateCurrentUser,
+        );
     }
   }
 
@@ -5174,24 +5248,256 @@ class CertificateScreen extends StatelessWidget {
   }
 }
 
-class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key, this.onBack});
+class DoctorProfileScreen extends StatefulWidget {
+  const DoctorProfileScreen({super.key, this.currentUser, this.onBack, required this.onSaved});
 
+  final ApiUser? currentUser;
   final VoidCallback? onBack;
+  final ValueChanged<ApiUser> onSaved;
 
-  Future<void> _logout(BuildContext context) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_kHasLoggedIn);
-      await prefs.remove(_kLoggedUserJson);
-    } catch (_) {
+  @override
+  State<DoctorProfileScreen> createState() => _DoctorProfileScreenState();
+}
+
+class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
+  final ApiClient _apiClient = ApiClient();
+  final ImagePicker _imagePicker = ImagePicker();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _cpfController = TextEditingController();
+  final TextEditingController _crmController = TextEditingController();
+  final TextEditingController _currentPasswordController = TextEditingController();
+  final TextEditingController _newPasswordController = TextEditingController();
+
+  ApiUser? _resolvedUser;
+  String? _selectedImageDataUrl;
+  bool _loadingUser = true;
+  bool _saving = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncControllers(widget.currentUser);
+    _resolvedUser = widget.currentUser;
+    _loadUserDetails();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _cpfController.dispose();
+    _crmController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    super.dispose();
+  }
+
+  void _syncControllers(ApiUser? user) {
+    _nameController.text = user?.name ?? '';
+    _emailController.text = user?.email ?? '';
+    _crmController.text = user?.crm ?? '';
+    _cpfController.text = _formatCpf(user?.cpf ?? '');
+  }
+
+  Future<void> _loadUserDetails() async {
+    final userId = widget.currentUser?.id.trim() ?? '';
+    if (userId.isEmpty) {
+      if (!mounted) return;
+      setState(() => _loadingUser = false);
+      return;
     }
 
-    if (!context.mounted) return;
+    try {
+      final fullUser = await _apiClient.fetchUserById(userId);
+      if (!mounted) return;
+      setState(() {
+        _resolvedUser = fullUser;
+        _syncControllers(fullUser);
+        _loadingUser = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingUser = false);
+    }
+  }
 
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
+  String _formatCpf(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    final limited = digits.length > 11 ? digits.substring(0, 11) : digits;
+    if (limited.length <= 3) return limited;
+    if (limited.length <= 6) return '${limited.substring(0, 3)}.${limited.substring(3)}';
+    if (limited.length <= 9) {
+      return '${limited.substring(0, 3)}.${limited.substring(3, 6)}.${limited.substring(6)}';
+    }
+    return '${limited.substring(0, 3)}.${limited.substring(3, 6)}.${limited.substring(6, 9)}-${limited.substring(9)}';
+  }
+
+  String _cpfDigits() => _cpfController.text.replaceAll(RegExp(r'\D'), '');
+
+  String? _currentImageValue() {
+    final selected = _selectedImageDataUrl?.trim();
+    if (selected != null && selected.isNotEmpty) return selected;
+    final resolved = _resolvedUser?.profilePhotoUrl?.trim();
+    if (resolved != null && resolved.isNotEmpty) return resolved;
+    final fallback = widget.currentUser?.profilePhotoUrl?.trim();
+    if (fallback != null && fallback.isNotEmpty) return fallback;
+    return null;
+  }
+
+  Widget _buildAvatar() {
+    final imageValue = _currentImageValue();
+    final fallback = const AssetImage('assets/images/group_21.png');
+
+    if (imageValue == null || imageValue.isEmpty) {
+      return CircleAvatar(radius: 44, backgroundColor: Colors.white, backgroundImage: fallback);
+    }
+
+    try {
+      if (imageValue.startsWith('data:image')) {
+        final base64Part = imageValue.contains(',') ? imageValue.substring(imageValue.indexOf(',') + 1) : imageValue;
+        return CircleAvatar(radius: 44, backgroundColor: Colors.white, backgroundImage: MemoryImage(base64Decode(base64Part)));
+      }
+
+      return CircleAvatar(radius: 44, backgroundColor: Colors.white, backgroundImage: NetworkImage(imageValue));
+    } catch (_) {
+      return CircleAvatar(radius: 44, backgroundColor: Colors.white, backgroundImage: fallback);
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final picked = await _imagePicker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (picked == null) return;
+
+    final bytes = await picked.readAsBytes();
+    final lowerName = picked.name.toLowerCase();
+    final mimeType = lowerName.endsWith('.png') ? 'png' : 'jpeg';
+    final dataUrl = 'data:image/$mimeType;base64,${base64Encode(bytes)}';
+
+    if (!mounted) return;
+    setState(() {
+      _selectedImageDataUrl = dataUrl;
+    });
+  }
+
+  Future<void> _saveProfile() async {
+    if (_saving) return;
+
+    final userId = (_resolvedUser?.id ?? widget.currentUser?.id).trim();
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final cpfDigits = _cpfDigits();
+    final crm = _crmController.text.trim();
+    final currentPassword = _currentPasswordController.text;
+    final newPassword = _newPasswordController.text;
+
+    if (userId.isEmpty || name.isEmpty || email.isEmpty || cpfDigits.isEmpty || crm.isEmpty) {
+      setState(() {
+        _errorMessage = 'Preencha nome, e-mail, CPF e CRM para salvar.';
+      });
+      return;
+    }
+
+    if (cpfDigits.length != 11) {
+      setState(() {
+        _errorMessage = 'CPF inválido. Informe 11 dígitos.';
+      });
+      return;
+    }
+
+    final wantsPasswordChange = currentPassword.trim().isNotEmpty || newPassword.trim().isNotEmpty;
+    if (wantsPasswordChange && currentPassword.trim().isEmpty) {
+      setState(() {
+        _errorMessage = 'Informe a senha atual para alterar a senha.';
+      });
+      return;
+    }
+
+    if (wantsPasswordChange && newPassword.trim().isEmpty) {
+      setState(() {
+        _errorMessage = 'Informe a nova senha para concluir a alteração.';
+      });
+      return;
+    }
+
+    if (newPassword.trim().isNotEmpty && newPassword.length < 6) {
+      setState(() {
+        _errorMessage = 'A senha precisa ter pelo menos 6 caracteres.';
+      });
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final updatedUser = await _apiClient.updateDoctorProfile(
+        userId: userId,
+        name: name,
+        email: email,
+        cpf: cpfDigits,
+        crm: crm,
+        image: _selectedImageDataUrl,
+        currentPassword: currentPassword.trim().isEmpty ? null : currentPassword,
+        newPassword: newPassword.trim().isEmpty ? null : newPassword,
+      );
+
+      await widget.onSaved(updatedUser);
+      if (!mounted) return;
+
+      setState(() {
+        _resolvedUser = updatedUser;
+        _syncControllers(updatedUser);
+        _selectedImageDataUrl = updatedUser.profilePhotoUrl;
+        _currentPasswordController.clear();
+        _newPasswordController.clear();
+        _saving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Perfil atualizado com sucesso.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().toLowerCase();
+      setState(() {
+        _saving = false;
+        if (message.contains('cpf já existe') || message.contains('cpf already in use')) {
+          _errorMessage = 'Este CPF já está cadastrado.';
+        } else if (message.contains('email já existe') || message.contains('email already in use')) {
+          _errorMessage = 'Este e-mail já está cadastrado.';
+        } else if (message.contains('senha atual inválida') || message.contains('current password')) {
+          _errorMessage = 'Não foi possível validar a senha.';
+        } else {
+          _errorMessage = 'Não foi possível atualizar o perfil.';
+        }
+      });
+    }
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.textDark),
+    );
+  }
+
+  Widget _buildErrorBox() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFE5E5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFD88A8A)),
+      ),
+      child: Text(
+        _errorMessage ?? '',
+        style: const TextStyle(color: Color(0xFF8E1B1B), fontWeight: FontWeight.w600),
+      ),
     );
   }
 
@@ -5201,29 +5507,96 @@ class SettingsScreen extends StatelessWidget {
       children: [
         _SectionHeaderBar(
           title: 'Meu Perfil',
-          onBack: onBack ?? () => Navigator.of(context).maybePop(),
+          onBack: widget.onBack ?? () => Navigator.of(context).maybePop(),
         ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Configurações',
-                    style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-                SizedBox(height: 10),
-                _SettingCard(title: 'Perfil', description: 'Dados do profissional: nome, registro (CRM) e\ncontato'),
-                _SettingCard(
-                    title: 'Segurança',
-                    description: 'Senha, biometria, autenticação em 2 fatores e\ncontrole de acesso.'),
-                _SettingCard(
-                    title: 'Clínica',
-                    description: 'Informações do consultório: nome, CNPJ,\nendereço, horários e convênios.'),
-                _SettingCard(
-                    title: 'Notificações', description: 'Lembretes de consultas e alertas importantes'),
-                _SettingCard(title: 'Aparência', description: 'Tema, idioma e personalização do app.'),
-                SizedBox(height: 4),
-                PrimaryActionButton(text: 'Sair e Salvar'),
-                PrimaryActionButton(text: 'Deslogar', onPressed: () => _logout(context)),
+                const Text(
+                  'Dados do médico',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                ),
+                const SizedBox(height: 18),
+                Center(
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            _buildAvatar(),
+                            Container(
+                              decoration: const BoxDecoration(
+                                color: AppColors.wine,
+                                shape: BoxShape.circle,
+                              ),
+                              padding: const EdgeInsets.all(6),
+                              child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton(
+                        onPressed: _pickImage,
+                        child: const Text('Alterar imagem do perfil'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _buildFieldLabel('Nome completo'),
+                const SizedBox(height: 8),
+                _RoundedInput(hint: 'Nome completo', controller: _nameController),
+                const SizedBox(height: 16),
+                _buildFieldLabel('E-mail'),
+                const SizedBox(height: 8),
+                _RoundedInput(hint: 'exemplo@dominio.com', controller: _emailController),
+                const SizedBox(height: 16),
+                _buildFieldLabel('CPF'),
+                const SizedBox(height: 8),
+                _RoundedInput(
+                  hint: '000.000.000-00',
+                  controller: _cpfController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: const [_CpfInputFormatter()],
+                ),
+                const SizedBox(height: 16),
+                _buildFieldLabel('CRM'),
+                const SizedBox(height: 8),
+                _RoundedInput(hint: 'CRM', controller: _crmController),
+                const SizedBox(height: 16),
+                _buildFieldLabel('Senha atual'),
+                const SizedBox(height: 8),
+                _RoundedInput(hint: 'Digite a senha atual', obscure: true, controller: _currentPasswordController),
+                const SizedBox(height: 16),
+                _buildFieldLabel('Nova senha'),
+                const SizedBox(height: 8),
+                _RoundedInput(hint: 'Deixe em branco para manter', obscure: true, controller: _newPasswordController),
+                const SizedBox(height: 16),
+                if (_loadingUser)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
+                if (_errorMessage != null) ...[
+                  _buildErrorBox(),
+                  const SizedBox(height: 14),
+                ],
+                const Text(
+                  'Para alterar a senha, preencha a senha atual + a nova senha.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Color(0xFF6B4A4A)),
+                ),
+                const SizedBox(height: 8),
+                PrimaryActionButton(
+                  text: _saving ? 'Salvando...' : 'Salvar alterações',
+                  onPressed: _saving ? null : _saveProfile,
+                ),
               ],
             ),
           ),
@@ -5278,9 +5651,15 @@ class AppHeader extends StatelessWidget {
     final todayText = '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
     final profilePhoto = currentUser?.profilePhotoUrl?.trim();
     final hasRemotePhoto = profilePhoto != null && profilePhoto.isNotEmpty;
-    final ImageProvider avatarProvider = hasRemotePhoto
-        ? NetworkImage(profilePhoto)
-        : const AssetImage('assets/images/group_21.png');
+    final ImageProvider avatarProvider;
+    if (!hasRemotePhoto) {
+      avatarProvider = const AssetImage('assets/images/group_21.png');
+    } else if (profilePhoto.startsWith('data:image')) {
+      final base64Part = profilePhoto.contains(',') ? profilePhoto.substring(profilePhoto.indexOf(',') + 1) : profilePhoto;
+      avatarProvider = MemoryImage(base64Decode(base64Part));
+    } else {
+      avatarProvider = NetworkImage(profilePhoto);
+    }
     final fullName = (currentUser?.name ?? '').trim();
     final parts = fullName
       .split(RegExp(r'\s+'))
