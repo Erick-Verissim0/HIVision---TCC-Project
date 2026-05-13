@@ -3894,7 +3894,7 @@ Future<void> _openDocument(
         <div class="title" style="margin-top: 60px;">RELATÓRIO MÉDICO DE SITUAÇÃO CLÍNICA</div>
 
         <div class="field" style="margin-top: 40px;">
-            <strong>Nome:</strong>
+            <strong>Nome do paciente:</strong>
             <span class="field-line" contenteditable="true">${patient.name}</span>
         </div>
         <div class="field">
@@ -3948,7 +3948,7 @@ Future<void> _openDocument(
         <div class="title" style="margin-top: 60px;">RECEITUÁRIO MÉDICO</div>
 
         <div class="field" style="margin-top: 40px;">
-            <strong>Nome:</strong>
+            <strong>Nome do paciente:</strong>
             <span class="field-line" contenteditable="true">${patient.name}</span>
         </div>
         <div class="field">
@@ -4051,7 +4051,7 @@ Future<void> _openDocument(
 
     <div class="title">ENCAMINHAMENTO MÉDICO</div>
 
-    <div class="row"><strong>Nome:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
+    <div class="row"><strong>Nome do paciente:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
     <div class="row"><strong>CPF:</strong> <span class="fl fl-medium" contenteditable="true">${patient.cpf}</span></div>
 
     <br><br><br>
@@ -4233,7 +4233,7 @@ Future<void> _openDocument(
 
     <div class="title">ATESTADO MÉDICO</div>
 
-    <div class="row"><strong>Nome:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
+    <div class="row"><strong>Nome do paciente:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
     <div class="row"><strong>CPF:</strong> <span class="fl fl-medium" contenteditable="true">${patient.cpf}</span></div>
 
     <br><br>
@@ -4325,7 +4325,7 @@ Future<void> _openDocument(
 
     <div class="title">DECLARAÇÃO DE COMPARECIMENTO</div>
 
-    <div class="row"><strong>Nome:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
+    <div class="row"><strong>Nome do paciente:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
     <div class="row"><strong>CPF:</strong> <span class="fl fl-medium" contenteditable="true">${patient.cpf}</span></div>
 
     <br>
@@ -4417,7 +4417,7 @@ Future<void> _openDocument(
 
     <br>
 
-    <div class="row"><strong>Nome:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
+    <div class="row"><strong>Nome do paciente:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
     <div class="row"><strong>CPF:</strong> <span class="fl fl-medium" contenteditable="true">${patient.cpf}</span></div>
 
     <br><br>
@@ -4502,7 +4502,7 @@ Future<void> _openDocument(
 
     <div class="title">SOLICITAÇÃO DE EXAMES</div>
 
-    <div class="row"><strong>Nome:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
+    <div class="row"><strong>Nome do paciente:</strong> <span class="fl fl-long" contenteditable="true">${patient.name}</span></div>
     <div class="row"><strong>CPF:</strong> <span class="fl fl-medium" contenteditable="true">${patient.cpf}</span></div>
 
     <br><br><br>
@@ -5139,7 +5139,7 @@ class _ApiPatientProfileDesktopState extends State<_ApiPatientProfileDesktop> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const _ConsultationHighlightedSectionTitle('Observações'),
+                          const _ConsultationHighlightedSectionTitle('Avaliação Clínica Atual'),
                           const SizedBox(height: 8),
                           Builder(
                             builder: (context) {
@@ -8292,10 +8292,10 @@ class _ConsultationDetailsPage extends StatelessWidget {
           value: appointment.medicationUse,
         ),
         const SizedBox(height: 10),
-        const _ConsultationHighlightedSectionTitle('Observações'),
+        const _ConsultationHighlightedSectionTitle('Avaliação Clínica Atual'),
         const SizedBox(height: 8),
         _ConsultationReadOnlyField(
-          label: 'Observações clínicas',
+          label: 'Avaliação Clínica Atual',
           value: appointment.notes,
           maxLines: 4,
         ),
@@ -8990,10 +8990,10 @@ class _NewConsultationDesktopFormContentState
           controller: _medicationsCtrl,
         ),
         const SizedBox(height: 10),
-        const _ConsultationHighlightedSectionTitle('Observações'),
+        const _ConsultationHighlightedSectionTitle('Avaliação Clínica Atual'),
         const SizedBox(height: 8),
         _ConsultationInputField(
-          label: 'Observações clínicas',
+          label: 'Avaliação Clínica Atual',
           controller: _observationsCtrl,
           maxLines: 4,
         ),
