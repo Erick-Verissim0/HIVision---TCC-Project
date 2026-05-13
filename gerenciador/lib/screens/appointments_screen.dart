@@ -333,7 +333,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              textField('notes', 'Observações', maxLines: 3),
+              textField('notes', 'Avaliação Clínica Atual', maxLines: 3),
               if (localError != null) ...[
                 const SizedBox(height: 10),
                 Text(localError!, style: const TextStyle(color: Colors.redAccent)),

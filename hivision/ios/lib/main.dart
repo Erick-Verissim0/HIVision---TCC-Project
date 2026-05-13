@@ -3228,7 +3228,7 @@ class RecentAppointmentDetailScreen extends StatelessWidget {
     'surgeries': 'Cirurgias',
     'comorbidities': 'Comorbidades',
     'medicationUse': 'Uso de medicamentos',
-    'notes': 'Observações clínicas',
+    'notes': 'Avaliação Clínica Atual',
   };
 
   List<String> get _novaConsultaFields => ['age', 'occupation', 'maritalStatus', 'sexualOrientation', 'concordantPartner'];
@@ -3237,7 +3237,7 @@ class RecentAppointmentDetailScreen extends StatelessWidget {
     'Status Clínico e Terapêutico do HIV': ['hivDiagnosisDate', 'cd4Nadir', 'currentArt', 'lastViralLoad', 'virologicalStatus', 'adherence', 'currentRegimen'],
     'Rastreamento e prevenção': ['cardiovascularRisk', 'neoplasmScreening', 'coinfectionScreening', 'immunizations', 'boneHealth'],
     'Histórico clínico': ['previousDiseases', 'allergy', 'surgeries', 'comorbidities', 'medicationUse'],
-    'Observações': ['notes'],
+    'Avaliação Clínica Atual': ['notes'],
   };
 
   @override
@@ -3916,7 +3916,7 @@ class _NewConsultationScreenState extends State<NewConsultationScreen> {
   final _allergiesCtrl = TextEditingController();
   final _surgeriesCtrl = TextEditingController();
 
-  // Step 5 — Observações
+  // Step 5 — Avaliação Clínica Atual
   final _observationsCtrl = TextEditingController();
 
   static const _stepTitles = [
@@ -3924,7 +3924,7 @@ class _NewConsultationScreenState extends State<NewConsultationScreen> {
     'Rastreamento e prevenção',
     'Status Clínico e Terapêutico do HIV',
     'Histórico clínico',
-    'Observações',
+    'Avaliação Clínica Atual',
   ];
 
   @override
@@ -4452,7 +4452,7 @@ class _NewConsultationScreenState extends State<NewConsultationScreen> {
 
   Widget _buildStep5() {
     return _NewPatientCategoryCard(title: _stepTitles[4], children: [
-      _buildMultilineInput('Observações', _observationsCtrl),
+      _buildMultilineInput('Avaliação Clínica Atual', _observationsCtrl),
     ]);
   }
 
@@ -6369,7 +6369,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         children: [
           _buildTitleRow('RELATÓRIO MÉDICO DE SITUAÇÃO CLÍNICA'),
           pw.SizedBox(height: 40),
-          _buildLinedFieldRow('Nome:', _patientNameCtrl.text.trim(), width: 206),
+          _buildLinedFieldRow('Nome do paciente:', _patientNameCtrl.text.trim(), width: 206),
           pw.SizedBox(height: 10),
           _buildLinedFieldRow('CPF:', _cpfCtrl.text.trim(), width: 206),
           pw.SizedBox(height: 448),
@@ -6393,7 +6393,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         children: [
           _buildTitleRow('RECEITUÁRIO MÉDICO'),
           pw.SizedBox(height: 40),
-          _buildLinedFieldRow('Nome:', _patientNameCtrl.text.trim(), width: 206),
+          _buildLinedFieldRow('Nome do paciente:', _patientNameCtrl.text.trim(), width: 206),
           _buildLinedFieldRow('CPF:', _cpfCtrl.text.trim(), width: 206),
           pw.SizedBox(height: 448),
           _buildLinedFieldRow('Nome do médico:', _doctorNameCtrl.text.trim(), width: 206),
@@ -6420,7 +6420,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         children: [
           _buildTitleRow('ENCAMINHAMENTO MÉDICO', fontSize: 15),
           pw.SizedBox(height: 34),
-          _buildLinedFieldRow('Nome:', _patientNameCtrl.text.trim(), width: 320),
+          _buildLinedFieldRow('Nome do paciente:', _patientNameCtrl.text.trim(), width: 320),
           _buildLinedFieldRow('CPF:', _cpfCtrl.text.trim(), width: 200),
           pw.SizedBox(height: 32),
           pw.Text('Encaminho  paciente para avaliação em:', style: pw.TextStyle(fontSize: 12)),
@@ -6482,7 +6482,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         children: [
           _buildTitleRow('ATESTADO MÉDICO', fontSize: 15),
           pw.SizedBox(height: 34),
-          _buildLinedFieldRow('Nome:', _patientNameCtrl.text.trim(), width: 320),
+          _buildLinedFieldRow('Nome do paciente:', _patientNameCtrl.text.trim(), width: 320),
           _buildLinedFieldRow('CPF:', _cpfCtrl.text.trim(), width: 180),
           pw.SizedBox(height: 34),
           pw.Row(
@@ -6589,7 +6589,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         children: [
           _buildTitleRow('ATESTADO MÉDICO', fontSize: 15),
           pw.SizedBox(height: 28),
-          _buildLinedFieldRow('Nome:', _patientNameCtrl.text.trim(), width: 320),
+          _buildLinedFieldRow('Nome do paciente:', _patientNameCtrl.text.trim(), width: 320),
           _buildLinedFieldRow('CPF:', _cpfCtrl.text.trim(), width: 206),
           pw.SizedBox(height: 20),
           pw.Text(
@@ -6806,7 +6806,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         children: [
           _buildTitleRow('ENCAMINHAMENTO AO CRIE - CENTRO DE REFERÊNCIA PARA IMUNOBIOLÓGICOS ESPECIAIS', fontSize: 13),
           pw.SizedBox(height: 24),
-          _buildFieldRow('Nome:', _patientNameCtrl.text.trim(), width: 206),
+          _buildFieldRow('Nome do paciente:', _patientNameCtrl.text.trim(), width: 206),
           _buildFieldRow('CPF:', _cpfCtrl.text.trim(), width: 206),
           pw.SizedBox(height: 24),
           pw.Text(
@@ -7159,7 +7159,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
     switch (documentType) {
       case 'Relatório Médico':
         return const [
-          _DocFieldDef('patient_name', 'Nome'),
+          _DocFieldDef('patient_name', 'Nome do paciente'),
           _DocFieldDef('cpf', 'CPF'),
           _DocFieldDef('doctor_name', 'Nome do médico'),
           _DocFieldDef('crm_uf', 'CRM/UF'),
@@ -7168,7 +7168,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         ];
       case 'Receituário Médico':
         return const [
-          _DocFieldDef('patient_name', 'Nome'),
+          _DocFieldDef('patient_name', 'Nome do paciente'),
           _DocFieldDef('cpf', 'CPF'),
           _DocFieldDef('doctor_name', 'Nome do médico'),
           _DocFieldDef('crm_uf', 'CRM/UF'),
@@ -7177,7 +7177,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         ];
       case 'Encaminhamento':
         return const [
-          _DocFieldDef('patient_name', 'Nome'),
+          _DocFieldDef('patient_name', 'Nome do paciente'),
           _DocFieldDef('cpf', 'CPF'),
           _DocFieldDef('especialidade', 'Especialidade'),
           _DocFieldDef('acompanhamento', 'Paciente em acompanhamento por'),
@@ -7192,7 +7192,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         ];
       case 'Atestado Médico Geral':
         return const [
-          _DocFieldDef('patient_name', 'Nome'),
+          _DocFieldDef('patient_name', 'Nome do paciente'),
           _DocFieldDef('cpf', 'CPF'),
           _DocFieldDef('dias', 'Dias de afastamento'),
           _DocFieldDef('dias_extenso', 'Dias por extenso'),
@@ -7205,7 +7205,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         ];
       case 'Atestado da Doença':
         return const [
-          _DocFieldDef('patient_name', 'Nome'),
+          _DocFieldDef('patient_name', 'Nome do paciente'),
           _DocFieldDef('cpf', 'CPF'),
           _DocFieldDef('diagnostico_em', 'Diagnóstico em'),
           _DocFieldDef('cd4', 'CD4+'),
@@ -7221,7 +7221,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         ];
       case 'Declaração de Comparecimento':
         return const [
-          _DocFieldDef('patient_name', 'Nome'),
+          _DocFieldDef('patient_name', 'Nome do paciente'),
           _DocFieldDef('cpf', 'CPF'),
           _DocFieldDef('nome_comparecimento', 'Sr.(a)'),
           _DocFieldDef('data_comparecimento', 'Data comparecimento (dd/mm/aaaa)'),
@@ -7232,7 +7232,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         ];
       case 'Encaminhamento ao CRIE':
         return const [
-          _DocFieldDef('patient_name', 'Nome'),
+          _DocFieldDef('patient_name', 'Nome do paciente'),
           _DocFieldDef('cpf', 'CPF'),
           _DocFieldDef('condicao_clinica', 'Condição clínica / diagnóstico/CID'),
           _DocFieldDef('resumo_clinico', 'Resumo clínico relevante', maxLines: 5),
@@ -7242,7 +7242,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         ];
       case 'Solicitação de Exames':
         return const [
-          _DocFieldDef('patient_name', 'Nome'),
+          _DocFieldDef('patient_name', 'Nome do paciente'),
           _DocFieldDef('cpf', 'CPF'),
           _DocFieldDef('solicito', 'Solicito', maxLines: 8),
           _DocFieldDef('indicacao_clinica', 'Indicação clínica'),
@@ -7252,7 +7252,7 @@ class _PatientDocumentEditorScreenState extends State<PatientDocumentEditorScree
         ];
       default:
         return const [
-          _DocFieldDef('patient_name', 'Nome'),
+          _DocFieldDef('patient_name', 'Nome do paciente'),
           _DocFieldDef('cpf', 'CPF'),
           _DocFieldDef('doctor_name', 'Nome do médico'),
           _DocFieldDef('crm_uf', 'CRM/UF'),
